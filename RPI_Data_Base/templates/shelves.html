@@ -1,0 +1,241 @@
+{% extends "base.html" %}
+
+{% block title %}貨架管理 - 資料庫管理系統{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+    <h2>🗂️ 貨架配置管理</h2>
+    <a href="{{ url_for('add_shelf') }}" class="btn btn-primary">➕ 新增貨架</a>
+</div>
+
+<div style="background: #e8f4f8; padding: 15px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #17a2b8;">
+    <h4>📋 說明</h4>
+    <ul style="margin: 10px 0; padding-left: 20px;">
+        <li>點擊「查看貨架」可以查詢 ESP32S3 設備當前的貨架配置</li>
+        <li>啟用的貨架會在每輪掃描中回傳距離數據</li>
+        <li>只有啟用的貨架才能在商品管理中被選擇</li>
+        <li>停用的貨架不會進行掃描，也不會消耗資源</li>
+    </ul>
+</div>
+
+<!-- 按設備分組顯示 -->
+{% if devices %}
+    {% for device in devices %}
+    <div style="background: white; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 30px; padding: 20px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; padding-bottom: 10px; border-bottom: 2px solid #f0f0f0;">
+            <div>
+                <h3 style="margin: 0;">
+                    📡 {{ device.device_name or device.device_id }}
+                    {% if device.status == 'online' %}
+                        <span class="badge badge-success">在線</span>
+                    {% else %}
+                        <span class="badge badge-danger">離線</span>
+                    {% endif %}
+                </h3>
+                <p style="color: #666; margin: 5px 0 0 0;">
+                    <strong>設備 ID:</strong> {{ device.device_id }} | 
+                    <strong>區域:</strong> {{ device.location or '未分配' }}
+                </p>
+            </div>
+            <button onclick="loadShelfConfig('{{ device.device_id }}')" class="btn btn-info">
+                🔄 查看貨架配置
+            </button>
+        </div>
+
+        <!-- 貨架列表容器 -->
+        <div id="shelves-{{ device.device_id }}" class="shelf-list">
+            <p style="color: #999; text-align: center; padding: 20px;">
+                點擊「查看貨架配置」載入設備貨架...
+            </p>
+        </div>
+    </div>
+    {% endfor %}
+{% else %}
+<div class="empty-state">
+    <p style="font-size: 1.2em;">📡 尚無設備記錄</p>
+    <p>請先在設備管理頁面添加 ESP32S3 設備</p>
+</div>
+{% endif %}
+
+<!-- 載入中提示 -->
+<div id="loading-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 9999; justify-content: center; align-items: center;">
+    <div style="background: white; padding: 30px; border-radius: 10px; text-align: center;">
+        <div class="spinner" style="width: 50px; height: 50px; border: 5px solid #f3f3f3; border-top: 5px solid #007bff; border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 20px auto;"></div>
+        <p style="font-size: 1.2em; margin: 0;">正在查詢設備貨架配置...</p>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_script %}
+<style>
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+    
+    .shelf-card {
+        background: #f8f9fa;
+        border: 2px solid #dee2e6;
+        border-radius: 8px;
+        padding: 15px;
+        margin-bottom: 10px;
+        transition: all 0.3s;
+    }
+    
+    .shelf-card.enabled {
+        border-color: #28a745;
+        background: #d4edda;
+    }
+    
+    .shelf-card.disabled {
+        border-color: #dc3545;
+        background: #f8d7da;
+    }
+    
+    .shelf-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+</style>
+
+<script>
+// 載入設備的貨架配置
+async function loadShelfConfig(deviceId) {
+    const container = document.getElementById(`shelves-${deviceId}`);
+    const overlay = document.getElementById('loading-overlay');
+    
+    overlay.style.display = 'flex';
+    
+    try {
+        const response = await fetch(`/api/shelves/config/${deviceId}`);
+        const data = await response.json();
+        
+        if (data.success && data.config) {
+            const config = data.config;
+            let html = '';
+            
+            if (config.shelves && config.shelves.length > 0) {
+                html += `
+                    <div style="background: #e8f4f8; padding: 10px; border-radius: 5px; margin-bottom: 15px;">
+                        <strong>貨架總數:</strong> ${config.total_count} | 
+                        <strong>已啟用:</strong> ${config.enabled_count} | 
+                        <strong>已停用:</strong> ${config.total_count - config.enabled_count}
+                    </div>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 15px;">
+                `;
+                
+                config.shelves.forEach(shelf => {
+                    const enabledClass = shelf.enabled ? 'enabled' : 'disabled';
+                    const statusIcon = shelf.enabled ? '✅' : '❌';
+                    const statusText = shelf.enabled ? '已啟用' : '已停用';
+                    const buttonClass = shelf.enabled ? 'btn-danger' : 'btn-success';
+                    const buttonText = shelf.enabled ? '停用' : '啟用';
+                    const buttonAction = shelf.enabled ? 'disableShelf' : 'enableShelf';
+                    
+                    html += `
+                        <div class="shelf-card ${enabledClass}" id="shelf-card-${shelf.shelf_id}">
+                            <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                                <div>
+                                    <h4 style="margin: 0 0 10px 0;">${statusIcon} 貨架 ${shelf.shelf_id}</h4>
+                                    <p style="margin: 5px 0; color: #666;">
+                                        <strong>GPIO:</strong> ${shelf.gpio}<br>
+                                        <strong>位置:</strong> ${shelf.index}<br>
+                                        <strong>狀態:</strong> ${statusText}
+                                    </p>
+                                </div>
+                                <button onclick="${buttonAction}('${shelf.shelf_id}')" 
+                                        class="btn ${buttonClass}" 
+                                        style="padding: 8px 16px;">
+                                    ${buttonText}
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                });
+                
+                html += '</div>';
+            } else {
+                html = '<p style="color: #999; text-align: center; padding: 20px;">此設備沒有貨架配置</p>';
+            }
+            
+            container.innerHTML = html;
+        } else {
+            container.innerHTML = `<p style="color: red; text-align: center; padding: 20px;">查詢失敗: ${data.error || '未知錯誤'}</p>`;
+        }
+    } catch (error) {
+        container.innerHTML = `<p style="color: red; text-align: center; padding: 20px;">發生錯誤: ${error.message}</p>`;
+    } finally {
+        overlay.style.display = 'none';
+    }
+}
+
+// 啟用貨架
+async function enableShelf(shelfId) {
+    try {
+        const response = await fetch(`/api/shelves/${shelfId}/enable`, {
+            method: 'POST'
+        });
+        const data = await response.json();
+        
+        if (data.success) {
+            // 更新 UI
+            const card = document.getElementById(`shelf-card-${shelfId}`);
+            if (card) {
+                card.className = 'shelf-card enabled';
+                card.querySelector('h4').innerHTML = `✅ 貨架 ${shelfId}`;
+                card.querySelector('button').className = 'btn btn-danger';
+                card.querySelector('button').textContent = '停用';
+                card.querySelector('button').setAttribute('onclick', `disableShelf('${shelfId}')`);
+                
+                // 更新狀態文本
+                const statusText = card.querySelector('p').innerHTML;
+                card.querySelector('p').innerHTML = statusText.replace('已停用', '已啟用');
+            }
+            
+            alert(`✅ 貨架 ${shelfId} 已啟用`);
+        } else {
+            alert(`❌ 啟用失敗: ${data.error}`);
+        }
+    } catch (error) {
+        alert(`❌ 發生錯誤: ${error.message}`);
+    }
+}
+
+// 停用貨架
+async function disableShelf(shelfId) {
+    if (!confirm(`確定要停用貨架 ${shelfId} 嗎？\n停用後將不會進行感測器掃描。`)) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/api/shelves/${shelfId}/disable`, {
+            method: 'POST'
+        });
+        const data = await response.json();
+        
+        if (data.success) {
+            // 更新 UI
+            const card = document.getElementById(`shelf-card-${shelfId}`);
+            if (card) {
+                card.className = 'shelf-card disabled';
+                card.querySelector('h4').innerHTML = `❌ 貨架 ${shelfId}`;
+                card.querySelector('button').className = 'btn btn-success';
+                card.querySelector('button').textContent = '啟用';
+                card.querySelector('button').setAttribute('onclick', `enableShelf('${shelfId}')`);
+                
+                // 更新狀態文本
+                const statusText = card.querySelector('p').innerHTML;
+                card.querySelector('p').innerHTML = statusText.replace('已啟用', '已停用');
+            }
+            
+            alert(`✅ 貨架 ${shelfId} 已停用`);
+        } else {
+            alert(`❌ 停用失敗: ${data.error}`);
+        }
+    } catch (error) {
+        alert(`❌ 發生錯誤: ${error.message}`);
+    }
+}
+</script>
+{% endblock %}

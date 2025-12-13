@@ -1,0 +1,184 @@
+{% extends "base.html" %}
+
+{% block title %}新增商品 - 資料庫管理系統{% endblock %}
+
+{% block content %}
+<h2>➕ 新增商品</h2>
+
+<div style="background: #e7f3ff; padding: 20px; border-left: 4px solid #667eea; border-radius: 5px; margin: 20px 0;">
+    <h4 style="color: #667eea; margin-bottom: 10px;">💡 新增流程</h4>
+    <ol style="color: #495057; line-height: 1.8;">
+        <li>填寫商品基本資訊（ID、名稱、長度）</li>
+        <li>選擇商品要放置的區域</li>
+        <li>從該區域的可用貨架中選擇一個</li>
+        <li>設定初始庫存數量</li>
+    </ol>
+</div>
+
+<form method="POST" style="max-width: 700px; margin-top: 30px;">
+    <!-- 商品基本資訊 -->
+    <div style="background: #f8f9fa; padding: 20px; border-radius: 10px; margin-bottom: 20px;">
+        <h3 style="margin-bottom: 15px; color: #495057;">📦 商品基本資訊</h3>
+        
+        <div class="form-group">
+            <label for="product_id">商品 ID *</label>
+            <input type="text" id="product_id" name="product_id" required 
+                   placeholder="例如: P001">
+        </div>
+        
+        <div class="form-group">
+            <label for="product_name">商品名稱 *</label>
+            <input type="text" id="product_name" name="product_name" required 
+                   placeholder="例如: 可口可樂">
+        </div>
+        
+        <div class="form-group">
+            <label for="product_length">商品長度 (cm) *</label>
+            <input type="number" step="0.1" id="product_length" name="product_length" required 
+                   placeholder="例如: 12.5">
+            <small style="color: #6c757d;">商品的實際長度，用於計算貨架容量</small>
+        </div>
+        
+        <div class="form-group">
+            <label for="description">商品描述</label>
+            <textarea id="description" name="description" rows="3" 
+                      placeholder="選填：輸入商品描述"></textarea>
+        </div>
+    </div>
+    
+    <!-- 位置配置 -->
+    <div style="background: #f8f9fa; padding: 20px; border-radius: 10px; margin-bottom: 20px;">
+        <h3 style="margin-bottom: 15px; color: #495057;">📍 位置配置</h3>
+        
+        {% if locations %}
+        <div class="form-group">
+            <label for="location">選擇區域 *</label>
+            <select id="location" name="location" required onchange="loadShelves(this.value)">
+                <option value="">-- 請選擇區域 --</option>
+                {% for location in locations %}
+                <option value="{{ location }}">{{ location }}</option>
+                {% endfor %}
+            </select>
+            <small style="color: #6c757d;">選擇商品要放置的倉庫區域</small>
+        </div>
+        
+        <div class="form-group">
+            <label for="shelf_id">選擇貨架 *</label>
+            <select id="shelf_id" name="shelf_id" required disabled>
+                <option value="">-- 請先選擇區域 --</option>
+            </select>
+            <small style="color: #6c757d;">該區域中可用的貨架（未綁定商品）</small>
+        </div>
+        
+        <div id="shelf-info" style="display: none; background: white; padding: 15px; border-radius: 5px; margin-top: 10px;">
+            <strong>📋 貨架資訊：</strong>
+            <div id="shelf-details" style="margin-top: 10px;"></div>
+        </div>
+        {% else %}
+        <div style="background: #fff3cd; padding: 15px; border-radius: 5px;">
+            <strong style="color: #856404;">⚠️ 尚未配置任何區域</strong>
+            <p style="color: #856404; margin: 5px 0;">請先在「設備管理」中為 ESP32S3 設備指定負責區域。</p>
+            <a href="{{ url_for('devices') }}" class="btn btn-primary" style="margin-top: 10px;">前往設備管理</a>
+        </div>
+        {% endif %}
+        
+        <div class="form-group">
+            <label for="stock_quantity">初始庫存數量</label>
+            <input type="number" id="stock_quantity" name="stock_quantity" value="0" min="0">
+            <small style="color: #6c757d;">商品的初始庫存數量</small>
+        </div>
+    </div>
+    
+    {% if locations %}
+    <div class="action-buttons">
+        <button type="submit" class="btn btn-primary">✓ 新增商品並綁定貨架</button>
+        <a href="{{ url_for('products') }}" class="btn" style="background: #6c757d; color: white;">取消</a>
+    </div>
+    {% endif %}
+</form>
+{% endblock %}
+
+{% block extra_script %}
+<script>
+    let shelvesData = {};
+    
+    function loadShelves(location) {
+        const shelfSelect = document.getElementById('shelf_id');
+        const shelfInfo = document.getElementById('shelf-info');
+        
+        if (!location) {
+            shelfSelect.innerHTML = '<option value="">-- 請先選擇區域 --</option>';
+            shelfSelect.disabled = true;
+            shelfInfo.style.display = 'none';
+            return;
+        }
+        
+        // 顯示載入中
+        shelfSelect.innerHTML = '<option value="">載入中...</option>';
+        shelfSelect.disabled = true;
+        
+        // 從 API 獲取該區域的可用貨架
+        fetch(`/api/shelves/by-location/${encodeURIComponent(location)}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.count === 0) {
+                    shelfSelect.innerHTML = '<option value="">-- 該區域沒有可用貨架 --</option>';
+                    shelfSelect.disabled = true;
+                    alert(`區域「${location}」中沒有可用的貨架。\n\n請先在「貨架管理」中新增貨架，或選擇其他區域。`);
+                } else {
+                    shelfSelect.innerHTML = '<option value="">-- 請選擇貨架 --</option>';
+                    data.shelves.forEach(shelf => {
+                        const option = document.createElement('option');
+                        option.value = shelf.shelf_id;
+                        option.textContent = `${shelf.shelf_id} (設備: ${shelf.device_id}, 最大距離: ${shelf.max_distance}cm)`;
+                        shelfSelect.appendChild(option);
+                        
+                        // 儲存貨架資訊
+                        shelvesData[shelf.shelf_id] = shelf;
+                    });
+                    shelfSelect.disabled = false;
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                shelfSelect.innerHTML = '<option value="">載入失敗</option>';
+                alert('載入貨架列表失敗：' + error);
+            });
+    }
+    
+    // 當選擇貨架時顯示詳細資訊
+    document.getElementById('shelf_id').addEventListener('change', function() {
+        const shelfId = this.value;
+        const shelfInfo = document.getElementById('shelf-info');
+        const shelfDetails = document.getElementById('shelf-details');
+        
+        if (shelfId && shelvesData[shelfId]) {
+            const shelf = shelvesData[shelfId];
+            shelfDetails.innerHTML = `
+                <table style="width: 100%;">
+                    <tr>
+                        <td style="padding: 5px;"><strong>貨架 ID：</strong></td>
+                        <td style="padding: 5px;">${shelf.shelf_id}</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 5px;"><strong>設備 ID：</strong></td>
+                        <td style="padding: 5px;">${shelf.device_id} (${shelf.device_name})</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 5px;"><strong>最大距離：</strong></td>
+                        <td style="padding: 5px;">${shelf.max_distance} cm</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 5px;"><strong>位置索引：</strong></td>
+                        <td style="padding: 5px;">${shelf.position_index || 'N/A'}</td>
+                    </tr>
+                </table>
+            `;
+            shelfInfo.style.display = 'block';
+        } else {
+            shelfInfo.style.display = 'none';
+        }
+    });
+</script>
+{% endblock %}
+

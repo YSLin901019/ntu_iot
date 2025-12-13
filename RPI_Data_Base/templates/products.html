@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+
+{% block title %}商品管理 - 資料庫管理系統{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+    <h2>📦 商品管理</h2>
+    <a href="{{ url_for('add_product') }}" class="btn btn-primary">➕ 新增商品</a>
+</div>
+
+{% if products %}
+<table>
+    <thead>
+        <tr>
+            <th>商品 ID</th>
+            <th>商品名稱</th>
+            <th>長度 (cm)</th>
+            <th>所在區域</th>
+            <th>所在貨架</th>
+            <th>庫存數量</th>
+            <th>描述</th>
+            <th>操作</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for product in products %}
+        <tr>
+            <td><strong>{{ product.product_id }}</strong></td>
+            <td>{{ product.product_name }}</td>
+            <td>{{ product.product_length }}</td>
+            <td>
+                {% if product.area_location %}
+                <span class="badge badge-info">{{ product.area_location }}</span>
+                {% else %}
+                <span class="badge badge-warning">未綁定</span>
+                {% endif %}
+            </td>
+            <td>
+                {% if product.shelf_id %}
+                <strong>{{ product.shelf_id }}</strong>
+                {% else %}
+                <span style="color: #6c757d;">未綁定</span>
+                {% endif %}
+            </td>
+            <td>
+                {% if product.shelf_id %}
+                <span class="badge badge-success">{{ product.stock_quantity }}</span>
+                {% else %}
+                <span style="color: #6c757d;">-</span>
+                {% endif %}
+            </td>
+            <td>{{ product.description or 'N/A' }}</td>
+            <td>
+                <button onclick="confirmDelete('商品', '{{ product.product_id }}', '/api/products/{{ product.product_id }}')" 
+                        class="btn btn-danger" style="padding: 5px 15px;">刪除</button>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<div class="empty-state">
+    <p style="font-size: 1.2em;">📦 尚無商品記錄</p>
+    <p>請點擊「新增商品」按鈕來新增第一個商品</p>
+</div>
+{% endif %}
+{% endblock %}
+

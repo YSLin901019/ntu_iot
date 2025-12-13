@@ -50,6 +50,8 @@ def init_database():
             max_distance REAL NOT NULL,
             stock_quantity INTEGER DEFAULT 0,
             position_index INTEGER,
+            gpio INTEGER,
+            enabled INTEGER DEFAULT 0,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (device_id) REFERENCES devices(device_id),
@@ -411,4 +413,177 @@ def init_default_data():
         )
     
     print(f"{Colors.OKGREEN}[初始化]{Colors.ENDC} 預設配置已載入")
+
+# ==================== 貨架啟用狀態管理 ====================
+def update_shelf_enabled_status(shelf_id: str, enabled: bool) -> bool:
+    """
+    更新貨架的啟用狀態
+    
+    Args:
+        shelf_id: 貨架 ID
+        enabled: 啟用狀態 (True/False)
+        
+    Returns:
+        bool: 更新成功返回 True，失敗返回 False
+    """
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            UPDATE shelves 
+            SET enabled = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE shelf_id = ?
+        ''', (1 if enabled else 0, shelf_id))
+        
+        conn.commit()
+        affected = cursor.rowcount
+        conn.close()
+        
+        if affected > 0:
+            status_text = "啟用" if enabled else "停用"
+            print(f"{Colors.OKGREEN}[成功]{Colors.ENDC} 貨架 {shelf_id} 已{status_text}")
+            return True
+        else:
+            print(f"{Colors.WARNING}[警告]{Colors.ENDC} 找不到貨架 {shelf_id}")
+            return False
+            
+    except Exception as e:
+        print(f"{Colors.FAIL}[錯誤]{Colors.ENDC} 更新貨架啟用狀態失敗: {e}")
+        return False
+
+def sync_shelf_config_from_esp32(device_id: str, shelf_config_list: List[Dict]) -> bool:
+    """
+    同步 ESP32S3 回傳的貨架配置到數據庫
+    
+    Args:
+        device_id: 設備 ID
+        shelf_config_list: 貨架配置列表，格式:
+            [
+                {'shelf_id': 'A1', 'index': 0, 'gpio': 4, 'enabled': True},
+                {'shelf_id': 'A2', 'index': 1, 'gpio': 5, 'enabled': False},
+                ...
+            ]
+            
+    Returns:
+        bool: 同步成功返回 True，失敗返回 False
+    """
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        cursor = conn.cursor()
+        
+        for shelf_config in shelf_config_list:
+            shelf_id = shelf_config['shelf_id']
+            gpio = shelf_config.get('gpio')
+            enabled = 1 if shelf_config.get('enabled', False) else 0
+            position_index = shelf_config.get('index', 0)
+            
+            # 檢查貨架是否存在
+            cursor.execute('SELECT shelf_id FROM shelves WHERE shelf_id = ?', (shelf_id,))
+            exists = cursor.fetchone()
+            
+            if exists:
+                # 更新現有貨架的 GPIO 和啟用狀態
+                cursor.execute('''
+                    UPDATE shelves 
+                    SET gpio = ?, enabled = ?, position_index = ?, updated_at = CURRENT_TIMESTAMP
+                    WHERE shelf_id = ?
+                ''', (gpio, enabled, position_index, shelf_id))
+            else:
+                # 創建新貨架（使用預設 max_distance）
+                cursor.execute('''
+                    INSERT INTO shelves 
+                    (shelf_id, device_id, max_distance, gpio, enabled, position_index)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                ''', (shelf_id, device_id, 30.0, gpio, enabled, position_index))
+        
+        conn.commit()
+        conn.close()
+        
+        print(f"{Colors.OKGREEN}[成功]{Colors.ENDC} 已同步設備 {device_id} 的 {len(shelf_config_list)} 個貨架配置")
+        return True
+        
+    except Exception as e:
+        print(f"{Colors.FAIL}[錯誤]{Colors.ENDC} 同步貨架配置失敗: {e}")
+        return False
+
+def get_enabled_shelves(device_id: Optional[str] = None) -> List[Dict]:
+    """
+    獲取所有啟用的貨架
+    
+    Args:
+        device_id: 可選，指定設備 ID 則只返回該設備的啟用貨架
+        
+    Returns:
+        List[Dict]: 啟用的貨架列表
+    """
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        
+        if device_id:
+            cursor.execute('''
+                SELECT * FROM shelves 
+                WHERE device_id = ? AND enabled = 1
+                ORDER BY position_index
+            ''', (device_id,))
+        else:
+            cursor.execute('''
+                SELECT * FROM shelves 
+                WHERE enabled = 1
+                ORDER BY device_id, position_index
+            ''')
+        
+        rows = cursor.fetchall()
+        conn.close()
+        
+        return [dict(row) for row in rows]
+    except Exception as e:
+        print(f"{Colors.FAIL}[錯誤]{Colors.ENDC} 查詢啟用貨架失敗: {e}")
+        return []
+
+def get_available_shelves_for_product(location: Optional[str] = None) -> List[Dict]:
+    """
+    獲取可用於商品配置的貨架（必須是啟用且未綁定商品的貨架）
+    
+    Args:
+        location: 可選，指定區域則只返回該區域的可用貨架
+        
+    Returns:
+        List[Dict]: 可用貨架列表
+    """
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        
+        if location:
+            cursor.execute('''
+                SELECT s.*, d.location, d.device_name, d.status
+                FROM shelves s
+                JOIN devices d ON s.device_id = d.device_id
+                WHERE s.enabled = 1 
+                  AND s.product_id IS NULL
+                  AND d.location = ?
+                ORDER BY s.device_id, s.position_index
+            ''', (location,))
+        else:
+            cursor.execute('''
+                SELECT s.*, d.location, d.device_name, d.status
+                FROM shelves s
+                JOIN devices d ON s.device_id = d.device_id
+                WHERE s.enabled = 1 
+                  AND s.product_id IS NULL
+                ORDER BY d.location, s.device_id, s.position_index
+            ''')
+        
+        rows = cursor.fetchall()
+        conn.close()
+        
+        return [dict(row) for row in rows]
+    except Exception as e:
+        print(f"{Colors.FAIL}[錯誤]{Colors.ENDC} 查詢可用貨架失敗: {e}")
+        return []
+
 

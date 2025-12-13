@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+
+{% block title %}系統總覽 - 資料庫管理系統{% endblock %}
+
+{% block content %}
+<h2>📊 系統統計總覽</h2>
+
+<div class="stats-grid">
+    <div class="stat-card">
+        <h3>📱 總設備數</h3>
+        <div class="value">{{ stats.device_count }}</div>
+        <p style="margin-top: 10px; opacity: 0.9;">在線: {{ stats.online_devices }} | 離線: {{ stats.device_count - stats.online_devices }}</p>
+    </div>
+    
+    <div class="stat-card">
+        <h3>🗂️ 總貨架數</h3>
+        <div class="value">{{ stats.shelf_count }}</div>
+        <p style="margin-top: 10px; opacity: 0.9;">已配置商品: {{ stats.shelves_with_products }}</p>
+    </div>
+    
+    <div class="stat-card">
+        <h3>📦 商品種類</h3>
+        <div class="value">{{ stats.product_count }}</div>
+        <p style="margin-top: 10px; opacity: 0.9;">總庫存: {{ stats.total_stock }}</p>
+    </div>
+    
+    <div class="stat-card">
+        <h3>📈 感測器記錄</h3>
+        <div class="value">{{ stats.data_count }}</div>
+        <p style="margin-top: 10px; opacity: 0.9;">占用率: {{ "%.1f"|format(stats.occupancy_rate) }}%</p>
+    </div>
+</div>
+
+<div style="background: #f8f9fa; padding: 30px; border-radius: 10px; text-align: center; margin-top: 20px;">
+    <h3 style="margin-bottom: 20px;">快速操作</h3>
+    <div style="display: flex; gap: 15px; justify-content: center; flex-wrap: wrap;">
+        <a href="{{ url_for('add_device') }}" class="btn btn-primary">➕ 新增設備</a>
+        <a href="{{ url_for('add_product') }}" class="btn btn-primary">➕ 新增商品</a>
+        <a href="{{ url_for('add_shelf') }}" class="btn btn-primary">➕ 新增貨架</a>
+        <a href="{{ url_for('sensor_data') }}" class="btn btn-success">📈 查看數據</a>
+    </div>
+</div>
+
+<div style="margin-top: 30px; padding: 20px; background: #e7f3ff; border-left: 4px solid #667eea; border-radius: 5px;">
+    <h4 style="color: #667eea; margin-bottom: 10px;">💡 系統說明</h4>
+    <ul style="color: #495057; line-height: 1.8;">
+        <li><strong>設備管理</strong>：管理所有 ESP32 設備，查看設備狀態</li>
+        <li><strong>商品管理</strong>：新增和管理商品資訊（名稱、長度、描述）</li>
+        <li><strong>貨架管理</strong>：配置貨架並綁定商品，管理庫存</li>
+        <li><strong>感測器數據</strong>：查看實時感測器數據和歷史記錄</li>
+    </ul>
+</div>
+{% endblock %}
+

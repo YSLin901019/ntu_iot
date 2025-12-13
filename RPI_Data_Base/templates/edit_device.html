@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+
+{% block title %}編輯設備 - 指定區域{% endblock %}
+
+{% block content %}
+<h2>✏️ 編輯設備 - 指定負責區域</h2>
+
+<div style="background: #e7f3ff; padding: 20px; border-left: 4px solid #667eea; border-radius: 5px; margin: 20px 0;">
+    <h4 style="color: #667eea; margin-bottom: 10px;">💡 功能說明</h4>
+    <p style="color: #495057;">為 ESP32S3 設備指定負責的倉庫區域。當 ESP32S3 連線後，您可以在這裡設定它負責管理的區域（例如：A 區、B 區、倉庫1 等）。</p>
+</div>
+
+<form method="POST" style="max-width: 600px; margin-top: 30px;">
+    <div class="form-group">
+        <label for="device_id">設備 ID</label>
+        <input type="text" id="device_id" name="device_id" value="{{ device.device_id }}" 
+               readonly style="background: #e9ecef; cursor: not-allowed;">
+        <small style="color: #6c757d;">設備 ID 不可修改</small>
+    </div>
+    
+    <div class="form-group">
+        <label for="device_name">設備名稱</label>
+        <input type="text" id="device_name" name="device_name" value="{{ device.device_name }}" required>
+    </div>
+    
+    <div class="form-group">
+        <label for="location">負責區域 *</label>
+        <input type="text" id="location" name="location" value="{{ device.location or '' }}" 
+               placeholder="例如：A 區、B 區、倉庫1、2F 儲物區" required>
+        <small style="color: #6c757d;">
+            <strong>提示：</strong>
+            <ul style="margin-top: 5px; padding-left: 20px; line-height: 1.6;">
+                <li>為新連線的 ESP32S3 指定負責的倉庫區域</li>
+                <li>區域名稱應該清楚易懂，方便管理</li>
+                <li>可以使用：樓層 + 區域（例如：2F-A區）</li>
+                <li>設定後，該設備管理的所有貨架都屬於此區域</li>
+            </ul>
+        </small>
+    </div>
+    
+    <div style="background: #fff3cd; padding: 15px; border-radius: 5px; margin-bottom: 20px;">
+        <strong style="color: #856404;">⚠️ 注意事項：</strong>
+        <ul style="color: #856404; margin-top: 5px; padding-left: 20px;">
+            <li>修改區域後，該設備管理的所有貨架都會歸屬到新區域</li>
+            <li>建議在設備剛連線時就指定區域</li>
+            <li>區域名稱建議保持一致性，方便後續管理</li>
+        </ul>
+    </div>
+    
+    <div style="background: #f8f9fa; padding: 15px; border-radius: 5px; margin-bottom: 20px;">
+        <strong>📋 當前設備資訊：</strong>
+        <table style="width: 100%; margin-top: 10px;">
+            <tr>
+                <td style="padding: 5px;"><strong>設備 ID：</strong></td>
+                <td style="padding: 5px;">{{ device.device_id }}</td>
+            </tr>
+            <tr>
+                <td style="padding: 5px;"><strong>當前狀態：</strong></td>
+                <td style="padding: 5px;">
+                    {% if device.status == 'online' %}
+                    <span class="badge badge-success">在線</span>
+                    {% else %}
+                    <span class="badge badge-danger">離線</span>
+                    {% endif %}
+                </td>
+            </tr>
+            <tr>
+                <td style="padding: 5px;"><strong>最後上線：</strong></td>
+                <td style="padding: 5px;">{{ device.last_seen or '尚未連線' }}</td>
+            </tr>
+        </table>
+    </div>
+    
+    <div class="action-buttons">
+        <button type="submit" class="btn btn-primary">✓ 儲存變更</button>
+        <a href="{{ url_for('devices') }}" class="btn" style="background: #6c757d; color: white;">取消</a>
+    </div>
+</form>
+
+<div style="margin-top: 30px; padding: 15px; background: #d1ecf1; border-left: 4px solid #17a2b8; border-radius: 5px;">
+    <strong style="color: #0c5460;">💡 常用區域名稱範例：</strong>
+    <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 10px;">
+        <span class="badge badge-info" onclick="document.getElementById('location').value='A 區'" 
+              style="cursor: pointer; padding: 8px 12px;">A 區</span>
+        <span class="badge badge-info" onclick="document.getElementById('location').value='B 區'" 
+              style="cursor: pointer; padding: 8px 12px;">B 區</span>
+        <span class="badge badge-info" onclick="document.getElementById('location').value='C 區'" 
+              style="cursor: pointer; padding: 8px 12px;">C 區</span>
+        <span class="badge badge-info" onclick="document.getElementById('location').value='倉庫1'" 
+              style="cursor: pointer; padding: 8px 12px;">倉庫1</span>
+        <span class="badge badge-info" onclick="document.getElementById('location').value='倉庫2'" 
+              style="cursor: pointer; padding: 8px 12px;">倉庫2</span>
+        <span class="badge badge-info" onclick="document.getElementById('location').value='2F-A區'" 
+              style="cursor: pointer; padding: 8px 12px;">2F-A區</span>
+        <span class="badge badge-info" onclick="document.getElementById('location').value='3F-B區'" 
+              style="cursor: pointer; padding: 8px 12px;">3F-B區</span>
+    </div>
+    <small style="color: #0c5460; margin-top: 5px; display: block;">點擊上方標籤快速填入</small>
+</div>
+{% endblock %}
+

@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+
+{% block title %}感測器數據 - 資料庫管理系統{% endblock %}
+
+{% block content %}
+<h2>📈 感測器數據</h2>
+
+<div class="filter-form">
+    <form method="GET" action="{{ url_for('sensor_data') }}">
+        <div class="form-group">
+            <label for="device_id">設備 ID</label>
+            <select id="device_id" name="device_id">
+                <option value="">-- 所有設備 --</option>
+                {% for device in devices %}
+                <option value="{{ device }}" {% if device == current_device %}selected{% endif %}>{{ device }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        
+        <div class="form-group">
+            <label for="shelf_id">貨架 ID</label>
+            <select id="shelf_id" name="shelf_id">
+                <option value="">-- 所有貨架 --</option>
+                {% for shelf in shelves_list %}
+                <option value="{{ shelf }}" {% if shelf == current_shelf %}selected{% endif %}>{{ shelf }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        
+        <div class="form-group">
+            <label for="limit">顯示筆數</label>
+            <select id="limit" name="limit">
+                <option value="20" {% if limit == 20 %}selected{% endif %}>20</option>
+                <option value="50" {% if limit == 50 %}selected{% endif %}>50</option>
+                <option value="100" {% if limit == 100 %}selected{% endif %}>100</option>
+                <option value="200" {% if limit == 200 %}selected{% endif %}>200</option>
+            </select>
+        </div>
+        
+        <button type="submit" class="btn btn-primary">🔍 篩選</button>
+    </form>
+</div>
+
+{% if data %}
+<p style="color: #6c757d; margin-bottom: 10px;">
+    共 {{ data|length }} 筆記錄
+    {% if current_device %}（設備: {{ current_device }}）{% endif %}
+    {% if current_shelf %}（貨架: {{ current_shelf }}）{% endif %}
+</p>
+
+<div style="overflow-x: auto;">
+    <table>
+        <thead>
+            <tr>
+                <th>時間</th>
+                <th>設備 ID</th>
+                <th>貨架 ID</th>
+                <th>距離 (cm)</th>
+                <th>占用狀態</th>
+                <th>填充率</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in data %}
+            <tr>
+                <td>{{ item.timestamp }}</td>
+                <td>{{ item.device_id }}</td>
+                <td><strong>{{ item.shelf_id }}</strong></td>
+                <td>{{ "%.1f"|format(item.distance_cm) }}</td>
+                <td>
+                    {% if item.occupied %}
+                    <span class="badge badge-success">有物品</span>
+                    {% else %}
+                    <span class="badge badge-warning">空的</span>
+                    {% endif %}
+                </td>
+                <td>
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <div style="flex: 1; background: #e9ecef; height: 20px; border-radius: 10px; overflow: hidden;">
+                            <div style="width: {{ item.fill_percent }}%; background: {% if item.fill_percent > 75 %}#28a745{% elif item.fill_percent > 50 %}#ffc107{% elif item.fill_percent > 25 %}#17a2b8{% else %}#dc3545{% endif %}; height: 100%;"></div>
+                        </div>
+                        <span style="min-width: 50px;">{{ "%.1f"|format(item.fill_percent) }}%</span>
+                    </div>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="empty-state">
+    <p style="font-size: 1.2em;">📈 沒有找到感測器數據</p>
+    <p>請檢查篩選條件或等待 ESP32 發送數據</p>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_script %}
+<script>
+    // 自動重新整理（每 10 秒）
+    let autoRefresh = setInterval(function() {
+        location.reload();
+    }, 10000);
+    
+    // 當用戶操作表單時停止自動重新整理
+    document.querySelectorAll('select, button').forEach(element => {
+        element.addEventListener('click', function() {
+            clearInterval(autoRefresh);
+        });
+    });
+</script>
+{% endblock %}
+

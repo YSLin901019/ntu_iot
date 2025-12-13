@@ -14,6 +14,22 @@ MQTT_KEEPALIVE = 60
 TOPIC_SENSOR = "shelf/sensor"
 TOPIC_STATUS = "shelf/status"
 TOPIC_COMMAND = "shelf/command"
+TOPIC_DISCOVERY = "shelf/discovery"        # 設備探測請求
+TOPIC_DISCOVERY_RESPONSE = "shelf/discovery/response"  # 設備探測回應
+TOPIC_HEARTBEAT = "shelf/heartbeat"        # 心跳檢測請求
+TOPIC_HEARTBEAT_RESPONSE = "shelf/heartbeat/response"  # 心跳檢測回應
+TOPIC_SHELF_CONFIG_REQUEST = "shelf/config/request"    # 貨架配置查詢請求
+TOPIC_SHELF_CONFIG_RESPONSE = "shelf/config/response"  # 貨架配置查詢回應
+
+# ==================== 設備探測設定 ====================
+DISCOVERY_TIMEOUT = 5  # 設備探測超時時間（秒）
+
+# ==================== 心跳檢測設定 ====================
+HEARTBEAT_INTERVAL = 30  # 心跳檢測間隔（秒）
+HEARTBEAT_TIMEOUT = 5    # 心跳檢測超時（秒）
+
+# ==================== 貨架配置查詢設定 ====================
+SHELF_CONFIG_TIMEOUT = 5  # 貨架配置查詢超時時間（秒）
 
 # ==================== 數據庫設定 ====================
 DB_FILE = "shelf_data.db"
