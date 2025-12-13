@@ -3,111 +3,359 @@
 {% block title %}感測器數據 - 資料庫管理系統{% endblock %}
 
 {% block content %}
-<h2>📈 感測器數據</h2>
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+    <h2>📈 感測器數據監控</h2>
+    <div style="display: flex; gap: 10px; align-items: center;">
+        <span id="refresh-status" style="color: #28a745;">● 實時更新中</span>
+        <button onclick="toggleAutoRefresh()" id="refresh-toggle" class="btn btn-success">
+            ⏸️ 暫停更新
+        </button>
+        <button onclick="manualRefresh()" class="btn btn-primary">
+            🔄 立即刷新
+        </button>
+    </div>
+</div>
 
-<div class="filter-form">
-    <form method="GET" action="{{ url_for('sensor_data') }}">
+<!-- 統計卡片 -->
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 20px;">
+    <div class="stat-card" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+        <div style="font-size: 0.9em; opacity: 0.9;">總數據筆數</div>
+        <div id="stat-total" style="font-size: 2em; font-weight: bold; margin-top: 5px;">-</div>
+    </div>
+    
+    <div class="stat-card" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); color: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+        <div style="font-size: 0.9em; opacity: 0.9;">在線設備</div>
+        <div id="stat-devices" style="font-size: 2em; font-weight: bold; margin-top: 5px;">-</div>
+    </div>
+    
+    <div class="stat-card" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); color: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+        <div style="font-size: 0.9em; opacity: 0.9;">活躍貨架</div>
+        <div id="stat-shelves" style="font-size: 2em; font-weight: bold; margin-top: 5px;">-</div>
+    </div>
+    
+    <div class="stat-card" style="background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%); color: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+        <div style="font-size: 0.9em; opacity: 0.9;">最後更新</div>
+        <div id="stat-last-update" style="font-size: 1.2em; font-weight: bold; margin-top: 5px;">-</div>
+    </div>
+</div>
+
+<!-- 篩選表單 -->
+<div style="background: #f8f9fa; padding: 20px; border-radius: 10px; margin-bottom: 20px;">
+    <h4 style="margin-bottom: 15px;">🔍 篩選條件</h4>
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
         <div class="form-group">
-            <label for="device_id">設備 ID</label>
-            <select id="device_id" name="device_id">
+            <label for="filter-device">設備 ID</label>
+            <select id="filter-device" onchange="applyFilters()">
                 <option value="">-- 所有設備 --</option>
-                {% for device in devices %}
-                <option value="{{ device }}" {% if device == current_device %}selected{% endif %}>{{ device }}</option>
-                {% endfor %}
             </select>
         </div>
         
         <div class="form-group">
-            <label for="shelf_id">貨架 ID</label>
-            <select id="shelf_id" name="shelf_id">
+            <label for="filter-shelf">貨架 ID</label>
+            <select id="filter-shelf" onchange="applyFilters()">
                 <option value="">-- 所有貨架 --</option>
-                {% for shelf in shelves_list %}
-                <option value="{{ shelf }}" {% if shelf == current_shelf %}selected{% endif %}>{{ shelf }}</option>
-                {% endfor %}
             </select>
         </div>
         
         <div class="form-group">
-            <label for="limit">顯示筆數</label>
-            <select id="limit" name="limit">
-                <option value="20" {% if limit == 20 %}selected{% endif %}>20</option>
-                <option value="50" {% if limit == 50 %}selected{% endif %}>50</option>
-                <option value="100" {% if limit == 100 %}selected{% endif %}>100</option>
-                <option value="200" {% if limit == 200 %}selected{% endif %}>200</option>
+            <label for="filter-limit">顯示筆數</label>
+            <select id="filter-limit" onchange="applyFilters()">
+                <option value="20">20 筆</option>
+                <option value="50" selected>50 筆</option>
+                <option value="100">100 筆</option>
+                <option value="200">200 筆</option>
             </select>
         </div>
         
-        <button type="submit" class="btn btn-primary">🔍 篩選</button>
-    </form>
+        <div class="form-group">
+            <label for="filter-occupied">占用狀態</label>
+            <select id="filter-occupied" onchange="applyFilters()">
+                <option value="">-- 全部 --</option>
+                <option value="1">有物品</option>
+                <option value="0">空的</option>
+            </select>
+        </div>
+    </div>
 </div>
 
-{% if data %}
-<p style="color: #6c757d; margin-bottom: 10px;">
-    共 {{ data|length }} 筆記錄
-    {% if current_device %}（設備: {{ current_device }}）{% endif %}
-    {% if current_shelf %}（貨架: {{ current_shelf }}）{% endif %}
-</p>
+<!-- 數據表格 -->
+<div id="data-container">
+    <div style="text-align: center; padding: 40px; color: #999;">
+        <div class="spinner" style="width: 50px; height: 50px; border: 5px solid #f3f3f3; border-top: 5px solid #007bff; border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 20px;"></div>
+        <p>正在載入數據...</p>
+    </div>
+</div>
 
-<div style="overflow-x: auto;">
-    <table>
-        <thead>
-            <tr>
-                <th>時間</th>
-                <th>設備 ID</th>
-                <th>貨架 ID</th>
-                <th>距離 (cm)</th>
-                <th>占用狀態</th>
-                <th>填充率</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for item in data %}
-            <tr>
-                <td>{{ item.timestamp }}</td>
-                <td>{{ item.device_id }}</td>
-                <td><strong>{{ item.shelf_id }}</strong></td>
-                <td>{{ "%.1f"|format(item.distance_cm) }}</td>
-                <td>
-                    {% if item.occupied %}
-                    <span class="badge badge-success">有物品</span>
-                    {% else %}
-                    <span class="badge badge-warning">空的</span>
-                    {% endif %}
-                </td>
-                <td>
-                    <div style="display: flex; align-items: center; gap: 10px;">
-                        <div style="flex: 1; background: #e9ecef; height: 20px; border-radius: 10px; overflow: hidden;">
-                            <div style="width: {{ item.fill_percent }}%; background: {% if item.fill_percent > 75 %}#28a745{% elif item.fill_percent > 50 %}#ffc107{% elif item.fill_percent > 25 %}#17a2b8{% else %}#dc3545{% endif %}; height: 100%;"></div>
-                        </div>
-                        <span style="min-width: 50px;">{{ "%.1f"|format(item.fill_percent) }}%</span>
-                    </div>
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-</div>
-{% else %}
-<div class="empty-state">
-    <p style="font-size: 1.2em;">📈 沒有找到感測器數據</p>
-    <p>請檢查篩選條件或等待 ESP32 發送數據</p>
-</div>
-{% endif %}
 {% endblock %}
 
 {% block extra_script %}
-<script>
-    // 自動重新整理（每 10 秒）
-    let autoRefresh = setInterval(function() {
-        location.reload();
-    }, 10000);
+<style>
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
     
-    // 當用戶操作表單時停止自動重新整理
-    document.querySelectorAll('select, button').forEach(element => {
-        element.addEventListener('click', function() {
-            clearInterval(autoRefresh);
+    .data-row {
+        transition: background-color 0.3s;
+    }
+    
+    .data-row:hover {
+        background-color: #f8f9fa;
+    }
+    
+    .data-row.new-data {
+        animation: highlight 2s;
+    }
+    
+    @keyframes highlight {
+        0% { background-color: #d4edda; }
+        100% { background-color: transparent; }
+    }
+</style>
+
+<script>
+let autoRefreshInterval = null;
+let isRefreshing = true;
+let lastDataIds = new Set();
+
+// 載入數據
+async function loadData() {
+    try {
+        // 構建查詢參數
+        const params = new URLSearchParams({
+            device_id: document.getElementById('filter-device').value,
+            shelf_id: document.getElementById('filter-shelf').value,
+            limit: document.getElementById('filter-limit').value,
+            occupied: document.getElementById('filter-occupied').value
         });
+        
+        const response = await fetch(`/api/sensor_data?${params}`);
+        const result = await response.json();
+        
+        if (result.success) {
+            updateStatistics(result.stats);
+            updateDataTable(result.data);
+            updateFilterOptions(result.filters);
+        } else {
+            console.error('載入數據失敗:', result.error);
+        }
+    } catch (error) {
+        console.error('載入數據時發生錯誤:', error);
+    }
+}
+
+// 更新統計資訊
+function updateStatistics(stats) {
+    document.getElementById('stat-total').textContent = stats.total_count || 0;
+    document.getElementById('stat-devices').textContent = stats.device_count || 0;
+    document.getElementById('stat-shelves').textContent = stats.shelf_count || 0;
+    
+    if (stats.last_update) {
+        const updateTime = new Date(stats.last_update);
+        const now = new Date();
+        const diffSeconds = Math.floor((now - updateTime) / 1000);
+        
+        let timeText;
+        if (diffSeconds < 60) {
+            timeText = `${diffSeconds} 秒前`;
+        } else if (diffSeconds < 3600) {
+            timeText = `${Math.floor(diffSeconds / 60)} 分鐘前`;
+        } else {
+            timeText = updateTime.toLocaleTimeString('zh-TW');
+        }
+        
+        document.getElementById('stat-last-update').textContent = timeText;
+    }
+}
+
+// 更新數據表格
+function updateDataTable(data) {
+    const container = document.getElementById('data-container');
+    
+    if (!data || data.length === 0) {
+        container.innerHTML = `
+            <div class="empty-state">
+                <p style="font-size: 1.2em;">📈 沒有找到感測器數據</p>
+                <p>請檢查篩選條件或等待 ESP32 發送數據</p>
+            </div>
+        `;
+        return;
+    }
+    
+    // 檢測新數據
+    const currentDataIds = new Set(data.map(item => item.id));
+    const newIds = new Set([...currentDataIds].filter(id => !lastDataIds.has(id)));
+    lastDataIds = currentDataIds;
+    
+    let html = `
+        <p style="color: #6c757d; margin-bottom: 10px;">
+            顯示 ${data.length} 筆記錄
+        </p>
+        <div style="overflow-x: auto;">
+            <table>
+                <thead>
+                    <tr>
+                        <th>時間</th>
+                        <th>設備</th>
+                        <th>區域</th>
+                        <th>貨架</th>
+                        <th>商品</th>
+                        <th>距離 (cm)</th>
+                        <th>占用狀態</th>
+                        <th>填充率</th>
+                    </tr>
+                </thead>
+                <tbody>
+    `;
+    
+    data.forEach(item => {
+        const isNew = newIds.has(item.id);
+        const rowClass = isNew ? 'data-row new-data' : 'data-row';
+        
+        const occupiedBadge = item.occupied 
+            ? '<span class="badge badge-success">✅ 有物品</span>' 
+            : '<span class="badge badge-warning">⭕ 空的</span>';
+        
+        const fillPercent = item.fill_percent || 0;
+        let fillColor;
+        if (fillPercent > 75) fillColor = '#28a745';
+        else if (fillPercent > 50) fillColor = '#ffc107';
+        else if (fillPercent > 25) fillColor = '#17a2b8';
+        else fillColor = '#dc3545';
+        
+        const productInfo = item.product_name || '<span style="color: #999;">未配置</span>';
+        const locationInfo = item.device_location || '<span style="color: #999;">未分配</span>';
+        
+        html += `
+            <tr class="${rowClass}">
+                <td>${formatTime(item.timestamp)}</td>
+                <td><small>${item.device_id}</small></td>
+                <td><span style="color: #667eea; font-weight: bold;">${locationInfo}</span></td>
+                <td><strong>${item.shelf_id}</strong></td>
+                <td>${productInfo}</td>
+                <td style="text-align: right;">${item.distance_cm.toFixed(1)}</td>
+                <td>${occupiedBadge}</td>
+                <td>
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <div style="flex: 1; background: #e9ecef; height: 20px; border-radius: 10px; overflow: hidden;">
+                            <div style="width: ${fillPercent}%; background: ${fillColor}; height: 100%; transition: width 0.3s;"></div>
+                        </div>
+                        <span style="min-width: 50px;">${fillPercent.toFixed(1)}%</span>
+                    </div>
+                </td>
+            </tr>
+        `;
     });
+    
+    html += `
+                </tbody>
+            </table>
+        </div>
+    `;
+    
+    container.innerHTML = html;
+}
+
+// 更新篩選選項
+function updateFilterOptions(filters) {
+    // 更新設備列表
+    const deviceSelect = document.getElementById('filter-device');
+    const currentDevice = deviceSelect.value;
+    deviceSelect.innerHTML = '<option value="">-- 所有設備 --</option>';
+    filters.devices.forEach(device => {
+        const option = document.createElement('option');
+        option.value = device;
+        option.textContent = device;
+        if (device === currentDevice) option.selected = true;
+        deviceSelect.appendChild(option);
+    });
+    
+    // 更新貨架列表
+    const shelfSelect = document.getElementById('filter-shelf');
+    const currentShelf = shelfSelect.value;
+    shelfSelect.innerHTML = '<option value="">-- 所有貨架 --</option>';
+    filters.shelves.forEach(shelf => {
+        const option = document.createElement('option');
+        option.value = shelf;
+        option.textContent = shelf;
+        if (shelf === currentShelf) option.selected = true;
+        shelfSelect.appendChild(option);
+    });
+}
+
+// 格式化時間
+function formatTime(timestamp) {
+    const date = new Date(timestamp);
+    return date.toLocaleString('zh-TW', {
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+    });
+}
+
+// 應用篩選
+function applyFilters() {
+    loadData();
+}
+
+// 手動刷新
+function manualRefresh() {
+    loadData();
+}
+
+// 切換自動更新
+function toggleAutoRefresh() {
+    isRefreshing = !isRefreshing;
+    const toggleBtn = document.getElementById('refresh-toggle');
+    const status = document.getElementById('refresh-status');
+    
+    if (isRefreshing) {
+        toggleBtn.innerHTML = '⏸️ 暫停更新';
+        toggleBtn.className = 'btn btn-success';
+        status.innerHTML = '● 實時更新中';
+        status.style.color = '#28a745';
+        startAutoRefresh();
+    } else {
+        toggleBtn.innerHTML = '▶️ 恢復更新';
+        toggleBtn.className = 'btn btn-warning';
+        status.innerHTML = '⏸️ 已暫停';
+        status.style.color = '#ffc107';
+        stopAutoRefresh();
+    }
+}
+
+// 啟動自動更新
+function startAutoRefresh() {
+    if (autoRefreshInterval) {
+        clearInterval(autoRefreshInterval);
+    }
+    autoRefreshInterval = setInterval(loadData, 3000); // 每 3 秒更新
+}
+
+// 停止自動更新
+function stopAutoRefresh() {
+    if (autoRefreshInterval) {
+        clearInterval(autoRefreshInterval);
+        autoRefreshInterval = null;
+    }
+}
+
+// 頁面載入時初始化
+window.addEventListener('DOMContentLoaded', function() {
+    loadData();
+    startAutoRefresh();
+});
+
+// 頁面隱藏時停止更新，顯示時恢復
+document.addEventListener('visibilitychange', function() {
+    if (document.hidden) {
+        stopAutoRefresh();
+    } else if (isRefreshing) {
+        startAutoRefresh();
+        loadData();
+    }
+});
 </script>
 {% endblock %}
-

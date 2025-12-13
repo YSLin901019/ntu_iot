@@ -21,8 +21,8 @@ struct ShelfConfig {
 // enabled = true: 啟用，會進行掃描並回傳數據
 // enabled = false: 停用，不會掃描，不會回傳數據
 ShelfConfig shelfConfig[SHELF_COUNT] = {
-  {"A1", 4,  true},   // 貨架 A1，GPIO 4，啟用
-  {"A2", 5,  true},   // 貨架 A2，GPIO 5，啟用
+  {"A1", 4,  false},   // 貨架 A1，GPIO 4，啟用
+  {"A2", 5,  false},   // 貨架 A2，GPIO 5，啟用
   {"A3", 6,  false},  // 貨架 A3，GPIO 6，停用
   {"A4", 7,  false},  // 貨架 A4，GPIO 7，停用
   {"B1", 8,  false},  // 貨架 B1，GPIO 8，停用

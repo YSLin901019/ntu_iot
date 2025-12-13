@@ -397,22 +397,15 @@ def get_stock_summary() -> List[Dict]:
 
 # ==================== 初始化預設數據 ====================
 def init_default_data():
-    """初始化預設數據（用於測試）"""
-    print(f"\n{Colors.OKCYAN}[初始化]{Colors.ENDC} 正在載入預設配置...")
+    """
+    初始化預設數據（已停用）
     
-    # 註冊預設設備
-    register_device("ESP32_001", "ESP32 設備 1", "倉庫 A 區")
-    
-    # 註冊預設貨架
-    for shelf_id, config in SHELF_CONFIG.items():
-        register_shelf(
-            shelf_id=shelf_id,
-            device_id="ESP32_001",
-            max_distance=config["max_distance"],
-            position_index=int(shelf_id[1:]) if len(shelf_id) > 1 else 0
-        )
-    
-    print(f"{Colors.OKGREEN}[初始化]{Colors.ENDC} 預設配置已載入")
+    注意：此函數已停用，不再自動創建測試設備。
+    所有設備應通過 Web UI 的「設備探測」功能添加。
+    """
+    print(f"\n{Colors.WARNING}[初始化]{Colors.ENDC} init_default_data() 已停用")
+    print(f"{Colors.WARNING}[提示]{Colors.ENDC} 請使用 Web UI 的設備探測功能添加設備")
+    pass
 
 # ==================== 貨架啟用狀態管理 ====================
 def update_shelf_enabled_status(shelf_id: str, enabled: bool) -> bool:

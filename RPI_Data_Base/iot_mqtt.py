@@ -159,8 +159,8 @@ def handle_status_message(payload: str, timestamp: str):
         
         print(f"  貨架數量: {data.get('shelf_count', 'N/A')}")
         
-        # 註冊或更新設備
-        register_device(device_id, device_name=f"ESP32_{device_id}")
+        # 註冊或更新設備（使用原始 device_id 作為設備名稱）
+        register_device(device_id, device_name=device_id)
         
     except json.JSONDecodeError:
         print(f"  訊息: {payload}")

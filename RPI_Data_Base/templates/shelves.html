@@ -152,14 +152,6 @@ async function loadShelfConfig(deviceId) {
                                 停用
                             </button>
                         `;
-                        // 配置商品按鈕（只有已啟用的貨架才顯示）
-                        html += `
-                            <button onclick="configureProduct('${deviceId}', '${shelf.shelf_id}')" 
-                                    class="btn btn-primary" 
-                                    style="padding: 8px 16px;">
-                                📦 配置商品
-                            </button>
-                        `;
                     } else {
                         html += `
                             <button onclick="enableShelf('${shelf.shelf_id}')" 
@@ -169,6 +161,15 @@ async function loadShelfConfig(deviceId) {
                             </button>
                         `;
                     }
+                    
+                    // 配置商品按鈕（所有貨架都顯示，但會在點擊時檢查）
+                    html += `
+                        <button onclick="configureProduct('${deviceId}', '${shelf.shelf_id}', ${shelf.enabled})" 
+                                class="btn btn-primary" 
+                                style="padding: 8px 16px;">
+                            📦 配置商品
+                        </button>
+                    `;
                     
                     html += `
                                 </div>
@@ -194,7 +195,13 @@ async function loadShelfConfig(deviceId) {
 }
 
 // 配置商品
-function configureProduct(deviceId, shelfId) {
+function configureProduct(deviceId, shelfId, isEnabled) {
+    // 檢查貨架是否已啟用
+    if (!isEnabled) {
+        alert('⚠️ 無法配置商品\n\n此貨架尚未啟用，無法配置商品。\n請先點擊「啟用」按鈕啟用此貨架。');
+        return;
+    }
+    
     // 跳轉到配置商品頁面
     window.location.href = `/shelves/${shelfId}/configure`;
 }

@@ -380,6 +380,15 @@ def configure_shelf_product(shelf_id):
         
         shelf = dict(shelf)
         
+        # 檢查貨架是否啟用（雙重保護）
+        if not shelf.get('enabled'):
+            conn.close()
+            return render_template('error.html', 
+                                 title='貨架未啟用',
+                                 message=f'貨架 {shelf_id} 尚未啟用，無法配置商品。',
+                                 action_text='返回貨架管理',
+                                 action_url=url_for('shelves')), 403
+        
         # 獲取設備資訊
         cursor.execute('SELECT * FROM devices WHERE device_id = ?', (shelf['device_id'],))
         device = dict(cursor.fetchone())
@@ -551,53 +560,90 @@ def delete_shelf(shelf_id):
 @app.route('/sensor_data')
 def sensor_data():
     """感測器數據頁面"""
+    return render_template('sensor_data.html')
+
+@app.route('/api/sensor_data')
+def api_sensor_data():
+    """API - 獲取感測器數據（用於 AJAX 更新）"""
     try:
-        device_id = request.args.get('device_id')
-        shelf_id = request.args.get('shelf_id')
+        device_id = request.args.get('device_id', '')
+        shelf_id = request.args.get('shelf_id', '')
         limit = int(request.args.get('limit', 50))
+        occupied = request.args.get('occupied', '')
         
         conn = get_db()
         cursor = conn.cursor()
         
+        # 構建查詢 - 包含設備區域資訊
         query = '''
-            SELECT * FROM sensor_data
+            SELECT sd.*, s.product_name, d.location as device_location
+            FROM sensor_data sd
+            LEFT JOIN shelves s ON sd.shelf_id = s.shelf_id
+            LEFT JOIN devices d ON sd.device_id = d.device_id
             WHERE 1=1
         '''
         params = []
         
         if device_id:
-            query += ' AND device_id = ?'
+            query += ' AND sd.device_id = ?'
             params.append(device_id)
         
         if shelf_id:
-            query += ' AND shelf_id = ?'
+            query += ' AND sd.shelf_id = ?'
             params.append(shelf_id)
         
-        query += ' ORDER BY timestamp DESC LIMIT ?'
+        if occupied:
+            query += ' AND sd.occupied = ?'
+            params.append(int(occupied))
+        
+        query += ' ORDER BY sd.timestamp DESC LIMIT ?'
         params.append(limit)
         
         cursor.execute(query, params)
         data = [dict(row) for row in cursor.fetchall()]
         
-        # 獲取設備列表用於篩選
+        # 獲取統計資訊
+        cursor.execute('SELECT COUNT(*) as count FROM sensor_data')
+        total_count = cursor.fetchone()['count']
+        
+        cursor.execute('SELECT COUNT(DISTINCT device_id) as count FROM sensor_data')
+        device_count = cursor.fetchone()['count']
+        
+        cursor.execute('SELECT COUNT(DISTINCT shelf_id) as count FROM sensor_data')
+        shelf_count = cursor.fetchone()['count']
+        
+        cursor.execute('SELECT MAX(timestamp) as last_update FROM sensor_data')
+        last_update_row = cursor.fetchone()
+        last_update = last_update_row['last_update'] if last_update_row else None
+        
+        # 獲取篩選選項
         cursor.execute('SELECT DISTINCT device_id FROM sensor_data ORDER BY device_id')
         devices = [row['device_id'] for row in cursor.fetchall()]
         
-        # 獲取貨架列表用於篩選
         cursor.execute('SELECT DISTINCT shelf_id FROM sensor_data ORDER BY shelf_id')
         shelves = [row['shelf_id'] for row in cursor.fetchall()]
         
         conn.close()
         
-        return render_template('sensor_data.html', 
-                             data=data, 
-                             devices=devices, 
-                             shelves_list=shelves,
-                             current_device=device_id,
-                             current_shelf=shelf_id,
-                             limit=limit)
+        return jsonify({
+            'success': True,
+            'data': data,
+            'stats': {
+                'total_count': total_count,
+                'device_count': device_count,
+                'shelf_count': shelf_count,
+                'last_update': last_update
+            },
+            'filters': {
+                'devices': devices,
+                'shelves': shelves
+            }
+        })
     except Exception as e:
-        return f"錯誤: {e}", 500
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
 
 # ==================== API 路由 ====================
 @app.route('/api/stats')
