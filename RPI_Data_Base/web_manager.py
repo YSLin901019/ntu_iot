@@ -30,6 +30,7 @@ except ImportError:
 # 添加貨架配置管理模塊
 try:
     from shelf_config_manager import query_device_shelf_config
+    from shelf_control import enable_shelf, disable_shelf
     from database import (
         sync_shelf_config_from_esp32,
         update_shelf_enabled_status,
@@ -37,9 +38,9 @@ try:
         get_available_shelves_for_product
     )
     SHELF_CONFIG_ENABLED = True
-except ImportError:
+except ImportError as e:
     SHELF_CONFIG_ENABLED = False
-    print("警告: 貨架配置模塊未載入")
+    print(f"警告: 貨架配置模塊未載入 - {e}")
 
 app = Flask(__name__)
 DB_FILE = "shelf_data.db"
@@ -333,6 +334,100 @@ def shelves():
         conn.close()
         
         return render_template('shelves.html', devices=devices)
+    except Exception as e:
+        return f"錯誤: {e}", 500
+
+@app.route('/shelves/<shelf_id>/configure', methods=['GET', 'POST', 'DELETE'])
+def configure_shelf_product(shelf_id):
+    """配置貨架商品"""
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        
+        if request.method == 'DELETE':
+            # 解除商品綁定
+            cursor.execute('''
+                UPDATE shelves 
+                SET product_id = NULL, 
+                    product_name = NULL, 
+                    product_length = NULL,
+                    stock_quantity = 0,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE shelf_id = ?
+            ''', (shelf_id,))
+            conn.commit()
+            conn.close()
+            
+            return jsonify({
+                'success': True,
+                'message': f'貨架 {shelf_id} 的商品綁定已解除'
+            })
+        
+        # GET 或 POST 請求
+        # 獲取貨架資訊
+        cursor.execute('''
+            SELECT s.*, d.device_name, d.location
+            FROM shelves s
+            LEFT JOIN devices d ON s.device_id = d.device_id
+            WHERE s.shelf_id = ?
+        ''', (shelf_id,))
+        
+        shelf = cursor.fetchone()
+        
+        if not shelf:
+            conn.close()
+            return "找不到貨架", 404
+        
+        shelf = dict(shelf)
+        
+        # 獲取設備資訊
+        cursor.execute('SELECT * FROM devices WHERE device_id = ?', (shelf['device_id'],))
+        device = dict(cursor.fetchone())
+        
+        if request.method == 'POST':
+            # 更新商品綁定
+            product_id = request.form.get('product_id')
+            stock_quantity = int(request.form.get('stock_quantity', 0))
+            
+            # 獲取商品資訊
+            cursor.execute('SELECT * FROM products WHERE product_id = ?', (product_id,))
+            product = cursor.fetchone()
+            
+            if not product:
+                conn.close()
+                return "找不到商品", 404
+            
+            product = dict(product)
+            
+            # 更新貨架
+            cursor.execute('''
+                UPDATE shelves 
+                SET product_id = ?,
+                    product_name = ?,
+                    product_length = ?,
+                    stock_quantity = ?,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE shelf_id = ?
+            ''', (product_id, product['product_name'], product['product_length'], 
+                  stock_quantity, shelf_id))
+            
+            conn.commit()
+            conn.close()
+            
+            return redirect(url_for('shelves'))
+        
+        # GET 請求 - 顯示配置頁面
+        # 獲取所有商品列表
+        cursor.execute('SELECT * FROM products ORDER BY product_name')
+        products = [dict(row) for row in cursor.fetchall()]
+        
+        conn.close()
+        
+        return render_template('configure_shelf.html', 
+                             shelf=shelf, 
+                             device=device,
+                             products=products)
+                             
     except Exception as e:
         return f"錯誤: {e}", 500
 
@@ -702,18 +797,46 @@ def api_enable_shelf(shelf_id):
         }), 500
     
     try:
-        success = update_shelf_enabled_status(shelf_id, True)
+        # 1. 從數據庫獲取貨架所屬的設備 ID
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute('SELECT device_id FROM shelves WHERE shelf_id = ?', (shelf_id,))
+        result = cursor.fetchone()
+        conn.close()
         
-        if success:
+        if not result:
+            return jsonify({
+                'success': False,
+                'error': f'找不到貨架 {shelf_id}'
+            }), 404
+        
+        device_id = result['device_id']
+        
+        # 2. 更新數據庫
+        db_success = update_shelf_enabled_status(shelf_id, True)
+        
+        if not db_success:
+            return jsonify({
+                'success': False,
+                'error': f'更新數據庫失敗'
+            }), 400
+        
+        # 3. 向 ESP32S3 發送啟用命令
+        mqtt_success = enable_shelf(device_id, shelf_id)
+        
+        if mqtt_success:
             return jsonify({
                 'success': True,
-                'message': f'貨架 {shelf_id} 已啟用'
+                'message': f'貨架 {shelf_id} 已啟用',
+                'synced': True
             })
         else:
             return jsonify({
-                'success': False,
-                'error': f'啟用貨架 {shelf_id} 失敗'
-            }), 400
+                'success': True,
+                'message': f'貨架 {shelf_id} 數據庫已更新，但 MQTT 命令發送失敗',
+                'synced': False
+            })
+            
     except Exception as e:
         return jsonify({
             'success': False,
@@ -730,18 +853,46 @@ def api_disable_shelf(shelf_id):
         }), 500
     
     try:
-        success = update_shelf_enabled_status(shelf_id, False)
+        # 1. 從數據庫獲取貨架所屬的設備 ID
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute('SELECT device_id FROM shelves WHERE shelf_id = ?', (shelf_id,))
+        result = cursor.fetchone()
+        conn.close()
         
-        if success:
+        if not result:
+            return jsonify({
+                'success': False,
+                'error': f'找不到貨架 {shelf_id}'
+            }), 404
+        
+        device_id = result['device_id']
+        
+        # 2. 更新數據庫
+        db_success = update_shelf_enabled_status(shelf_id, False)
+        
+        if not db_success:
+            return jsonify({
+                'success': False,
+                'error': f'更新數據庫失敗'
+            }), 400
+        
+        # 3. 向 ESP32S3 發送停用命令
+        mqtt_success = disable_shelf(device_id, shelf_id)
+        
+        if mqtt_success:
             return jsonify({
                 'success': True,
-                'message': f'貨架 {shelf_id} 已停用'
+                'message': f'貨架 {shelf_id} 已停用',
+                'synced': True
             })
         else:
             return jsonify({
-                'success': False,
-                'error': f'停用貨架 {shelf_id} 失敗'
-            }), 400
+                'success': True,
+                'message': f'貨架 {shelf_id} 數據庫已更新，但 MQTT 命令發送失敗',
+                'synced': False
+            })
+            
     except Exception as e:
         return jsonify({
             'success': False,

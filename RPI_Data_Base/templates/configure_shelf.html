@@ -1,0 +1,203 @@
+{% extends "base.html" %}
+
+{% block title %}配置貨架商品 - 資料庫管理系統{% endblock %}
+
+{% block content %}
+<div style="max-width: 800px; margin: 0 auto;">
+    <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 30px;">
+        <a href="{{ url_for('shelves') }}" class="btn" style="background: #6c757d; color: white;">← 返回</a>
+        <h2 style="margin: 0;">📦 配置貨架商品</h2>
+    </div>
+
+    <!-- 貨架資訊 -->
+    <div style="background: #f8f9fa; padding: 20px; border-radius: 10px; margin-bottom: 20px;">
+        <h3 style="margin-bottom: 15px; color: #495057;">🗂️ 貨架資訊</h3>
+        <table style="width: 100%; background: white; border-radius: 5px;">
+            <tr>
+                <td style="padding: 10px; font-weight: bold; width: 30%;">貨架 ID</td>
+                <td style="padding: 10px;">{{ shelf.shelf_id }}</td>
+            </tr>
+            <tr>
+                <td style="padding: 10px; font-weight: bold;">設備 ID</td>
+                <td style="padding: 10px;">{{ shelf.device_id }}</td>
+            </tr>
+            <tr>
+                <td style="padding: 10px; font-weight: bold;">區域</td>
+                <td style="padding: 10px;">{{ device.location or '未分配' }}</td>
+            </tr>
+            <tr>
+                <td style="padding: 10px; font-weight: bold;">GPIO</td>
+                <td style="padding: 10px;">{{ shelf.gpio or 'N/A' }}</td>
+            </tr>
+            <tr>
+                <td style="padding: 10px; font-weight: bold;">最大距離</td>
+                <td style="padding: 10px;">{{ shelf.max_distance }} cm</td>
+            </tr>
+            <tr>
+                <td style="padding: 10px; font-weight: bold;">當前狀態</td>
+                <td style="padding: 10px;">
+                    {% if shelf.enabled %}
+                        <span class="badge badge-success">✅ 已啟用</span>
+                    {% else %}
+                        <span class="badge badge-danger">❌ 已停用</span>
+                    {% endif %}
+                </td>
+            </tr>
+        </table>
+    </div>
+
+    {% if not shelf.enabled %}
+    <!-- 未啟用警告 -->
+    <div style="background: #fff3cd; padding: 20px; border-radius: 10px; border-left: 4px solid #ffc107; margin-bottom: 20px;">
+        <h4 style="color: #856404; margin: 0 0 10px 0;">⚠️ 貨架未啟用</h4>
+        <p style="color: #856404; margin: 0;">此貨架尚未啟用，無法配置商品。請先在貨架管理頁面啟用此貨架。</p>
+        <a href="{{ url_for('shelves') }}" class="btn btn-warning" style="margin-top: 15px;">返回啟用貨架</a>
+    </div>
+    {% else %}
+    
+    <!-- 當前商品資訊 -->
+    {% if shelf.product_id %}
+    <div style="background: #d1ecf1; padding: 20px; border-radius: 10px; border-left: 4px solid #17a2b8; margin-bottom: 20px;">
+        <h4 style="color: #0c5460; margin: 0 0 15px 0;">📦 當前商品</h4>
+        <table style="width: 100%; background: white; border-radius: 5px;">
+            <tr>
+                <td style="padding: 10px; font-weight: bold; width: 30%;">商品 ID</td>
+                <td style="padding: 10px;">{{ shelf.product_id }}</td>
+            </tr>
+            <tr>
+                <td style="padding: 10px; font-weight: bold;">商品名稱</td>
+                <td style="padding: 10px;">{{ shelf.product_name }}</td>
+            </tr>
+            <tr>
+                <td style="padding: 10px; font-weight: bold;">商品長度</td>
+                <td style="padding: 10px;">{{ shelf.product_length }} cm</td>
+            </tr>
+            <tr>
+                <td style="padding: 10px; font-weight: bold;">庫存數量</td>
+                <td style="padding: 10px;">{{ shelf.stock_quantity }}</td>
+            </tr>
+        </table>
+        <button onclick="if(confirm('確定要解除此貨架的商品綁定嗎？')) unbindProduct()" 
+                class="btn btn-danger" style="margin-top: 15px;">
+            🗑️ 解除商品綁定
+        </button>
+    </div>
+    {% endif %}
+
+    <!-- 配置商品表單 -->
+    <form method="POST" style="background: #f8f9fa; padding: 20px; border-radius: 10px;">
+        <h3 style="margin-bottom: 15px; color: #495057;">
+            {% if shelf.product_id %}
+                🔄 更換商品
+            {% else %}
+                ➕ 綁定商品
+            {% endif %}
+        </h3>
+        
+        <div class="form-group">
+            <label for="product_id">選擇商品 *</label>
+            <select id="product_id" name="product_id" required onchange="updateProductInfo(this.value)">
+                <option value="">-- 請選擇商品 --</option>
+                {% for product in products %}
+                <option value="{{ product.product_id }}" 
+                        data-name="{{ product.product_name }}"
+                        data-length="{{ product.product_length }}"
+                        {% if shelf.product_id == product.product_id %}selected{% endif %}>
+                    {{ product.product_id }} - {{ product.product_name }} ({{ product.product_length }} cm)
+                </option>
+                {% endfor %}
+            </select>
+            <small style="color: #6c757d;">選擇要存放在此貨架的商品</small>
+        </div>
+
+        <div id="product-info" style="display: none; background: white; padding: 15px; border-radius: 5px; margin: 15px 0;">
+            <strong>📋 商品資訊：</strong>
+            <div id="product-details" style="margin-top: 10px;"></div>
+        </div>
+        
+        <div class="form-group">
+            <label for="stock_quantity">初始庫存數量</label>
+            <input type="number" id="stock_quantity" name="stock_quantity" 
+                   value="{{ shelf.stock_quantity or 0 }}" min="0">
+            <small style="color: #6c757d;">設定商品的初始庫存數量</small>
+        </div>
+        
+        <div class="action-buttons">
+            <button type="submit" class="btn btn-primary">
+                {% if shelf.product_id %}
+                    ✓ 更新商品配置
+                {% else %}
+                    ✓ 綁定商品到貨架
+                {% endif %}
+            </button>
+            <a href="{{ url_for('shelves') }}" class="btn" style="background: #6c757d; color: white;">取消</a>
+        </div>
+    </form>
+    {% endif %}
+</div>
+
+{% endblock %}
+
+{% block extra_script %}
+<script>
+    function updateProductInfo(productId) {
+        const select = document.getElementById('product_id');
+        const infoDiv = document.getElementById('product-info');
+        const detailsDiv = document.getElementById('product-details');
+        
+        if (productId) {
+            const option = select.options[select.selectedIndex];
+            const name = option.dataset.name;
+            const length = option.dataset.length;
+            
+            detailsDiv.innerHTML = `
+                <table style="width: 100%;">
+                    <tr>
+                        <td style="padding: 5px;"><strong>商品 ID：</strong></td>
+                        <td style="padding: 5px;">${productId}</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 5px;"><strong>商品名稱：</strong></td>
+                        <td style="padding: 5px;">${name}</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 5px;"><strong>商品長度：</strong></td>
+                        <td style="padding: 5px;">${length} cm</td>
+                    </tr>
+                </table>
+            `;
+            infoDiv.style.display = 'block';
+        } else {
+            infoDiv.style.display = 'none';
+        }
+    }
+    
+    async function unbindProduct() {
+        try {
+            const response = await fetch('{{ url_for("configure_shelf_product", shelf_id=shelf.shelf_id) }}', {
+                method: 'DELETE'
+            });
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                alert('✅ 商品綁定已解除');
+                location.reload();
+            } else {
+                alert('❌ 解除失敗：' + data.error);
+            }
+        } catch (error) {
+            alert('❌ 發生錯誤：' + error);
+        }
+    }
+    
+    // 頁面載入時顯示已選商品資訊
+    window.addEventListener('DOMContentLoaded', function() {
+        const select = document.getElementById('product_id');
+        if (select.value) {
+            updateProductInfo(select.value);
+        }
+    });
+</script>
+{% endblock %}
+

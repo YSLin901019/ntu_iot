@@ -5,16 +5,15 @@
 {% block content %}
 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
     <h2>🗂️ 貨架配置管理</h2>
-    <a href="{{ url_for('add_shelf') }}" class="btn btn-primary">➕ 新增貨架</a>
 </div>
 
 <div style="background: #e8f4f8; padding: 15px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #17a2b8;">
-    <h4>📋 說明</h4>
+    <h4>📋 使用說明</h4>
     <ul style="margin: 10px 0; padding-left: 20px;">
-        <li>點擊「查看貨架」可以查詢 ESP32S3 設備當前的貨架配置</li>
+        <li>點擊「查看貨架」查詢 ESP32S3 設備當前的貨架配置</li>
         <li>啟用的貨架會在每輪掃描中回傳距離數據</li>
-        <li>只有啟用的貨架才能在商品管理中被選擇</li>
-        <li>停用的貨架不會進行掃描，也不會消耗資源</li>
+        <li><strong>只有已啟用的貨架才能配置商品</strong></li>
+        <li>停用的貨架不會進行掃描，也無法配置商品</li>
     </ul>
 </div>
 
@@ -129,14 +128,11 @@ async function loadShelfConfig(deviceId) {
                     const enabledClass = shelf.enabled ? 'enabled' : 'disabled';
                     const statusIcon = shelf.enabled ? '✅' : '❌';
                     const statusText = shelf.enabled ? '已啟用' : '已停用';
-                    const buttonClass = shelf.enabled ? 'btn-danger' : 'btn-success';
-                    const buttonText = shelf.enabled ? '停用' : '啟用';
-                    const buttonAction = shelf.enabled ? 'disableShelf' : 'enableShelf';
                     
                     html += `
                         <div class="shelf-card ${enabledClass}" id="shelf-card-${shelf.shelf_id}">
                             <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-                                <div>
+                                <div style="flex: 1;">
                                     <h4 style="margin: 0 0 10px 0;">${statusIcon} 貨架 ${shelf.shelf_id}</h4>
                                     <p style="margin: 5px 0; color: #666;">
                                         <strong>GPIO:</strong> ${shelf.gpio}<br>
@@ -144,11 +140,38 @@ async function loadShelfConfig(deviceId) {
                                         <strong>狀態:</strong> ${statusText}
                                     </p>
                                 </div>
-                                <button onclick="${buttonAction}('${shelf.shelf_id}')" 
-                                        class="btn ${buttonClass}" 
-                                        style="padding: 8px 16px;">
-                                    ${buttonText}
-                                </button>
+                                <div style="display: flex; flex-direction: column; gap: 8px;">
+                    `;
+                    
+                    // 啟用/停用按鈕
+                    if (shelf.enabled) {
+                        html += `
+                            <button onclick="disableShelf('${shelf.shelf_id}')" 
+                                    class="btn btn-danger" 
+                                    style="padding: 8px 16px;">
+                                停用
+                            </button>
+                        `;
+                        // 配置商品按鈕（只有已啟用的貨架才顯示）
+                        html += `
+                            <button onclick="configureProduct('${deviceId}', '${shelf.shelf_id}')" 
+                                    class="btn btn-primary" 
+                                    style="padding: 8px 16px;">
+                                📦 配置商品
+                            </button>
+                        `;
+                    } else {
+                        html += `
+                            <button onclick="enableShelf('${shelf.shelf_id}')" 
+                                    class="btn btn-success" 
+                                    style="padding: 8px 16px;">
+                                啟用
+                            </button>
+                        `;
+                    }
+                    
+                    html += `
+                                </div>
                             </div>
                         </div>
                     `;
@@ -168,6 +191,12 @@ async function loadShelfConfig(deviceId) {
     } finally {
         overlay.style.display = 'none';
     }
+}
+
+// 配置商品
+function configureProduct(deviceId, shelfId) {
+    // 跳轉到配置商品頁面
+    window.location.href = `/shelves/${shelfId}/configure`;
 }
 
 // 啟用貨架

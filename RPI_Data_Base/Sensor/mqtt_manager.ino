@@ -224,6 +224,9 @@ void handleMQTTCommand(String command) {
     int idx = getShelfIndexById(shelfId.c_str());
     if (idx >= 0) {
       setShelfEnabled(idx, true);
+      Serial.print("[MQTT] 貨架 ");
+      Serial.print(shelfId);
+      Serial.println(" 已啟用");
       publishSystemStatus();  // 回報更新後的狀態
     } else {
       Serial.print("[MQTT] 找不到貨架: ");
@@ -238,6 +241,9 @@ void handleMQTTCommand(String command) {
     int idx = getShelfIndexById(shelfId.c_str());
     if (idx >= 0) {
       setShelfEnabled(idx, false);
+      Serial.print("[MQTT] 貨架 ");
+      Serial.print(shelfId);
+      Serial.println(" 已停用");
       publishSystemStatus();  // 回報更新後的狀態
     } else {
       Serial.print("[MQTT] 找不到貨架: ");
