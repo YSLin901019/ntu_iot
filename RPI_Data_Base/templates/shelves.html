@@ -122,7 +122,7 @@ async function loadShelfConfig(deviceId) {
                         <strong>已啟用:</strong> ${config.enabled_count} | 
                         <strong>已停用:</strong> ${config.total_count - config.enabled_count}
                     </div>
-                    <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 15px;">
+                    <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 15px;">
                 `;
                 
                 config.shelves.forEach(shelf => {
@@ -135,7 +135,7 @@ async function loadShelfConfig(deviceId) {
                     const lengthColor = shelf.shelf_length > 0 ? '#28a745' : '#ffc107';
                     
                     html += `
-                        <div class="shelf-card ${enabledClass}" id="shelf-card-${shelf.shelf_id}">
+                        <div class="shelf-card ${enabledClass}" id="shelf-card-${shelf.shelf_id}" data-shelf-id="${shelf.shelf_id}">
                             <div style="display: flex; justify-content: space-between; align-items: flex-start;">
                                 <div style="flex: 1;">
                                     <h4 style="margin: 0 0 10px 0;">${statusIcon} 貨架 ${shelf.shelf_id}</h4>
@@ -145,6 +145,13 @@ async function loadShelfConfig(deviceId) {
                                         <strong>狀態:</strong> ${statusText}<br>
                                         <strong>貨架長度:</strong> <span style="color: ${lengthColor}; font-weight: bold;">${shelfLength}</span>
                                     </p>
+                    `;
+                    
+                    // 商品資訊區塊（從資料庫獲取）
+                    html += `
+                                    <div id="product-info-${shelf.shelf_id}" style="margin-top: 10px; padding: 10px; background: rgba(255,255,255,0.5); border-radius: 5px;">
+                                        <div style="font-size: 0.85em; color: #999;">載入商品資訊中...</div>
+                                    </div>
                                 </div>
                                 <div style="display: flex; flex-direction: column; gap: 8px;">
                     `;
@@ -199,6 +206,13 @@ async function loadShelfConfig(deviceId) {
             }
             
             container.innerHTML = html;
+            
+            // 載入所有貨架的商品資訊
+            if (config.shelves && config.shelves.length > 0) {
+                config.shelves.forEach(shelf => {
+                    loadProductInfo(shelf.shelf_id);
+                });
+            }
         } else {
             container.innerHTML = `<p style="color: red; text-align: center; padding: 20px;">查詢失敗: ${data.error || '未知錯誤'}</p>`;
         }
@@ -206,6 +220,43 @@ async function loadShelfConfig(deviceId) {
         container.innerHTML = `<p style="color: red; text-align: center; padding: 20px;">發生錯誤: ${error.message}</p>`;
     } finally {
         overlay.style.display = 'none';
+    }
+}
+
+// 載入商品資訊
+async function loadProductInfo(shelfId) {
+    const infoDiv = document.getElementById(`product-info-${shelfId}`);
+    if (!infoDiv) return;
+    
+    try {
+        const response = await fetch(`/api/shelves/${shelfId}/product`);
+        const data = await response.json();
+        
+        if (data.success && data.product) {
+            const product = data.product;
+            infoDiv.innerHTML = `
+                <div style="font-size: 0.9em;">
+                    <div style="font-weight: bold; color: #007bff; margin-bottom: 5px;">📦 已配置商品</div>
+                    <div style="color: #333;">
+                        <strong>商品名稱:</strong> ${product.product_name}<br>
+                        <strong>商品長度:</strong> ${product.product_length} cm<br>
+                        <strong>庫存數量:</strong> ${product.stock_quantity || 0} 個
+                    </div>
+                </div>
+            `;
+        } else {
+            infoDiv.innerHTML = `
+                <div style="font-size: 0.85em; color: #999;">
+                    📭 尚未配置商品
+                </div>
+            `;
+        }
+    } catch (error) {
+        infoDiv.innerHTML = `
+            <div style="font-size: 0.85em; color: #dc3545;">
+                ⚠️ 無法載入商品資訊
+            </div>
+        `;
     }
 }
 

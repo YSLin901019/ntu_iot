@@ -13,6 +13,44 @@
         <button onclick="manualRefresh()" class="btn btn-primary">
             🔄 立即刷新
         </button>
+        <button onclick="showDeleteOptions()" class="btn btn-danger" style="background: #dc3545;">
+            🗑️ 清理數據
+        </button>
+    </div>
+</div>
+
+<!-- 刪除數據選項（隱藏的彈出框）-->
+<div id="delete-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
+    <div style="background: white; padding: 30px; border-radius: 10px; max-width: 500px; width: 90%; box-shadow: 0 8px 16px rgba(0,0,0,0.2);">
+        <h3 style="margin: 0 0 20px 0; color: #2d3748;">🗑️ 清理感測器歷史數據</h3>
+        
+        <div style="background: #fff3cd; padding: 15px; border-radius: 5px; border-left: 4px solid #ffc107; margin-bottom: 20px;">
+            <strong style="color: #856404;">⚠️ 注意</strong>
+            <p style="color: #856404; margin: 5px 0 0 0; font-size: 14px;">
+                此操作只會刪除感測器的歷史數據記錄，<strong>不會影響</strong>設備配置、貨架設定、商品資訊等。
+            </p>
+        </div>
+        
+        <div style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 25px;">
+            <button onclick="deleteData('time', 7)" class="btn" style="background: #17a2b8; color: white; padding: 12px; text-align: left;">
+                🗓️ 刪除 7 天前的數據
+            </button>
+            <button onclick="deleteData('time', 30)" class="btn" style="background: #17a2b8; color: white; padding: 12px; text-align: left;">
+                🗓️ 刪除 30 天前的數據
+            </button>
+            <button onclick="deleteData('time', 90)" class="btn" style="background: #17a2b8; color: white; padding: 12px; text-align: left;">
+                🗓️ 刪除 90 天前的數據
+            </button>
+            <button onclick="deleteData('all')" class="btn btn-danger" style="padding: 12px; text-align: left;">
+                ⚠️ 刪除所有歷史數據
+            </button>
+        </div>
+        
+        <div style="display: flex; gap: 10px; justify-content: flex-end;">
+            <button onclick="hideDeleteOptions()" class="btn" style="background: #6c757d; color: white; padding: 10px 20px;">
+                取消
+            </button>
+        </div>
     </div>
 </div>
 
@@ -44,7 +82,14 @@
     <h4 style="margin-bottom: 15px;">🔍 篩選條件</h4>
     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
         <div class="form-group">
-            <label for="filter-device">設備 ID</label>
+            <label for="filter-location">區域</label>
+            <select id="filter-location" onchange="applyFilters()">
+                <option value="">-- 所有區域 --</option>
+            </select>
+        </div>
+        
+        <div class="form-group">
+            <label for="filter-device">設備</label>
             <select id="filter-device" onchange="applyFilters()">
                 <option value="">-- 所有設備 --</option>
             </select>
@@ -123,6 +168,7 @@ async function loadData() {
     try {
         // 構建查詢參數
         const params = new URLSearchParams({
+            location: document.getElementById('filter-location').value,
             device_id: document.getElementById('filter-device').value,
             shelf_id: document.getElementById('filter-shelf').value,
             limit: document.getElementById('filter-limit').value,
@@ -261,6 +307,22 @@ function updateDataTable(data) {
 
 // 更新篩選選項
 function updateFilterOptions(filters) {
+    // 更新區域列表
+    const locationSelect = document.getElementById('filter-location');
+    const currentLocation = locationSelect.value;
+    locationSelect.innerHTML = '<option value="">-- 所有區域 --</option>';
+    if (filters.locations) {
+        filters.locations.forEach(location => {
+            if (location) {  // 過濾空值
+                const option = document.createElement('option');
+                option.value = location;
+                option.textContent = location;
+                if (location === currentLocation) option.selected = true;
+                locationSelect.appendChild(option);
+            }
+        });
+    }
+    
     // 更新設備列表
     const deviceSelect = document.getElementById('filter-device');
     const currentDevice = deviceSelect.value;
@@ -328,6 +390,76 @@ function toggleAutoRefresh() {
         stopAutoRefresh();
     }
 }
+
+// 顯示刪除選項
+function showDeleteOptions() {
+    const modal = document.getElementById('delete-modal');
+    modal.style.display = 'flex';
+}
+
+// 隱藏刪除選項
+function hideDeleteOptions() {
+    const modal = document.getElementById('delete-modal');
+    modal.style.display = 'none';
+}
+
+// 刪除數據
+async function deleteData(type, days = null) {
+    let confirmMsg = '';
+    
+    if (type === 'all') {
+        confirmMsg = '確定要刪除所有感測器歷史數據嗎？\n\n此操作無法復原！\n（不會影響設備配置和貨架設定）';
+    } else if (type === 'time') {
+        confirmMsg = `確定要刪除 ${days} 天前的數據嗎？\n\n此操作無法復原！`;
+    }
+    
+    if (!confirm(confirmMsg)) {
+        return;
+    }
+    
+    try {
+        const requestData = { type };
+        if (type === 'time') {
+            requestData.days = days;
+        }
+        
+        const response = await fetch('/api/sensor_data/delete', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(requestData)
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            alert(`✅ ${result.message}\n\n已刪除 ${result.deleted_count} 筆數據`);
+            hideDeleteOptions();
+            loadData(); // 重新載入數據
+        } else {
+            alert('❌ 刪除失敗：' + (result.error || result.message));
+        }
+    } catch (error) {
+        console.error('刪除數據失敗:', error);
+        alert('❌ 刪除失敗：' + error.message);
+    }
+}
+
+// 點擊模態框外部關閉
+document.addEventListener('click', function(event) {
+    const modal = document.getElementById('delete-modal');
+    if (event.target === modal) {
+        hideDeleteOptions();
+    }
+});
+
+// ESC 鍵關閉模態框
+document.addEventListener('keydown', function(event) {
+    if (event.key === 'Escape') {
+        hideDeleteOptions();
+    }
+});
 
 // 啟動自動更新
 function startAutoRefresh() {

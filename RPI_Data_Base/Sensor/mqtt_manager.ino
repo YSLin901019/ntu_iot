@@ -102,6 +102,9 @@ void setupMQTT() {
   // 設置 MQTT 緩衝區大小（增加到 2048 以支援較大的 JSON）
   mqttClient.setBufferSize(2048);
   
+  // 設置 MQTT KeepAlive 時間（預設 15 秒太短，改為 60 秒）
+  mqttClient.setKeepAlive(60);
+  
   // 先解析 MQTT 伺服器位址
   if (!resolveMQTTServer()) {
     Serial.println("[MQTT] 警告: MQTT 伺服器位址解析失敗，將在連線時重試");
@@ -126,6 +129,7 @@ void setupMQTT() {
   Serial.println("[MQTT] MQTT 設定完成");
   Serial.print("[MQTT] 緩衝區大小: ");
   Serial.println(mqttClient.getBufferSize());
+  Serial.println("[MQTT] KeepAlive 時間: 60 秒");
   
   // 嘗試首次連線
   if (WiFi.status() == WL_CONNECTED) {

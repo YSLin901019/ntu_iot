@@ -438,6 +438,145 @@ def batch_save_sensor_data(data_list: list) -> bool:
         print(f"{Colors.FAIL}[錯誤]{Colors.ENDC} 批次數據庫儲存失敗: {e}")
         return False
 
+def delete_sensor_data_by_time(days: int = None, hours: int = None, all_data: bool = False) -> dict:
+    """
+    刪除感測器歷史數據（不影響貨架配置和商品資訊）
+    
+    參數:
+        days: 刪除 N 天前的數據
+        hours: 刪除 N 小時前的數據
+        all_data: 刪除所有歷史數據
+    
+    返回:
+        dict: {'success': bool, 'deleted_count': int, 'message': str}
+    """
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        cursor = conn.cursor()
+        
+        if all_data:
+            # 刪除所有感測器數據
+            cursor.execute('SELECT COUNT(*) FROM sensor_data')
+            count_before = cursor.fetchone()[0]
+            
+            cursor.execute('DELETE FROM sensor_data')
+            conn.commit()
+            
+            deleted_count = count_before
+            message = "已刪除所有感測器歷史數據"
+            
+        elif days:
+            # 刪除 N 天前的數據
+            cursor.execute('SELECT COUNT(*) FROM sensor_data WHERE timestamp < datetime("now", ?)', (f'-{days} days',))
+            count_before = cursor.fetchone()[0]
+            
+            cursor.execute('DELETE FROM sensor_data WHERE timestamp < datetime("now", ?)', (f'-{days} days',))
+            conn.commit()
+            
+            deleted_count = count_before
+            message = f"已刪除 {days} 天前的數據"
+            
+        elif hours:
+            # 刪除 N 小時前的數據
+            cursor.execute('SELECT COUNT(*) FROM sensor_data WHERE timestamp < datetime("now", ?)', (f'-{hours} hours',))
+            count_before = cursor.fetchone()[0]
+            
+            cursor.execute('DELETE FROM sensor_data WHERE timestamp < datetime("now", ?)', (f'-{hours} hours',))
+            conn.commit()
+            
+            deleted_count = count_before
+            message = f"已刪除 {hours} 小時前的數據"
+        else:
+            conn.close()
+            return {'success': False, 'deleted_count': 0, 'message': '未指定刪除條件'}
+        
+        conn.close()
+        
+        print(f"{Colors.OKGREEN}[數據庫]{Colors.ENDC} {message}：{deleted_count} 筆")
+        return {
+            'success': True,
+            'deleted_count': deleted_count,
+            'message': message
+        }
+        
+    except Exception as e:
+        print(f"{Colors.FAIL}[錯誤]{Colors.ENDC} 刪除感測器數據失敗: {e}")
+        return {
+            'success': False,
+            'deleted_count': 0,
+            'message': str(e)
+        }
+
+def delete_sensor_data_by_device(device_id: str) -> dict:
+    """
+    刪除指定設備的所有感測器數據
+    
+    參數:
+        device_id: 設備 ID
+    
+    返回:
+        dict: {'success': bool, 'deleted_count': int}
+    """
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        cursor = conn.cursor()
+        
+        cursor.execute('SELECT COUNT(*) FROM sensor_data WHERE device_id = ?', (device_id,))
+        count_before = cursor.fetchone()[0]
+        
+        cursor.execute('DELETE FROM sensor_data WHERE device_id = ?', (device_id,))
+        conn.commit()
+        conn.close()
+        
+        print(f"{Colors.OKGREEN}[數據庫]{Colors.ENDC} 已刪除設備 {device_id} 的感測器數據：{count_before} 筆")
+        return {
+            'success': True,
+            'deleted_count': count_before
+        }
+        
+    except Exception as e:
+        print(f"{Colors.FAIL}[錯誤]{Colors.ENDC} 刪除設備數據失敗: {e}")
+        return {
+            'success': False,
+            'deleted_count': 0,
+            'message': str(e)
+        }
+
+def delete_sensor_data_by_shelf(shelf_id: str) -> dict:
+    """
+    刪除指定貨架的所有感測器數據
+    
+    參數:
+        shelf_id: 貨架 ID
+    
+    返回:
+        dict: {'success': bool, 'deleted_count': int}
+    """
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        cursor = conn.cursor()
+        
+        cursor.execute('SELECT COUNT(*) FROM sensor_data WHERE shelf_id = ?', (shelf_id,))
+        count_before = cursor.fetchone()[0]
+        
+        cursor.execute('DELETE FROM sensor_data WHERE shelf_id = ?', (shelf_id,))
+        conn.commit()
+        conn.close()
+        
+        print(f"{Colors.OKGREEN}[數據庫]{Colors.ENDC} 已刪除貨架 {shelf_id} 的感測器數據：{count_before} 筆")
+        return {
+            'success': True,
+            'deleted_count': count_before
+        }
+        
+    except Exception as e:
+        print(f"{Colors.FAIL}[錯誤]{Colors.ENDC} 刪除貨架數據失敗: {e}")
+        return {
+            'success': False,
+            'deleted_count': 0,
+            'message': str(e)
+        }
+
 def query_latest_data(shelf_id: str = None, device_id: str = None, limit: int = 10) -> List[Dict]:
     """查詢最新數據"""
     try:

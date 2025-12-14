@@ -589,10 +589,40 @@ def sensor_data():
     """感測器數據頁面"""
     return render_template('sensor_data.html')
 
+@app.route('/api/sensor_data/delete', methods=['POST'])
+def delete_sensor_data():
+    """API - 刪除感測器歷史數據"""
+    try:
+        from database import delete_sensor_data_by_time, delete_sensor_data_by_device, delete_sensor_data_by_shelf
+        
+        data = request.get_json()
+        delete_type = data.get('type')  # 'time', 'device', 'shelf', 'all'
+        
+        if delete_type == 'all':
+            result = delete_sensor_data_by_time(all_data=True)
+        elif delete_type == 'time':
+            days = data.get('days')
+            hours = data.get('hours')
+            result = delete_sensor_data_by_time(days=days, hours=hours)
+        elif delete_type == 'device':
+            device_id = data.get('device_id')
+            result = delete_sensor_data_by_device(device_id)
+        elif delete_type == 'shelf':
+            shelf_id = data.get('shelf_id')
+            result = delete_sensor_data_by_shelf(shelf_id)
+        else:
+            return jsonify({'success': False, 'error': '無效的刪除類型'}), 400
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 @app.route('/api/sensor_data')
 def api_sensor_data():
     """API - 獲取感測器數據（用於 AJAX 更新）"""
     try:
+        location = request.args.get('location', '')
         device_id = request.args.get('device_id', '')
         shelf_id = request.args.get('shelf_id', '')
         limit = int(request.args.get('limit', 50))
@@ -610,6 +640,10 @@ def api_sensor_data():
             WHERE 1=1
         '''
         params = []
+        
+        if location:
+            query += ' AND d.location = ?'
+            params.append(location)
         
         if device_id:
             query += ' AND sd.device_id = ?'
@@ -651,6 +685,10 @@ def api_sensor_data():
         cursor.execute('SELECT DISTINCT shelf_id FROM sensor_data ORDER BY shelf_id')
         shelves = [row['shelf_id'] for row in cursor.fetchall()]
         
+        # 獲取所有不重複的區域（從 devices 表）
+        cursor.execute('SELECT DISTINCT location FROM devices WHERE location IS NOT NULL AND location != "" ORDER BY location')
+        locations = [row['location'] for row in cursor.fetchall()]
+        
         conn.close()
         
         return jsonify({
@@ -664,7 +702,8 @@ def api_sensor_data():
             },
             'filters': {
                 'devices': devices,
-                'shelves': shelves
+                'shelves': shelves,
+                'locations': locations
             }
         })
     except Exception as e:
@@ -1017,6 +1056,43 @@ def api_disable_shelf(shelf_id):
                 'success': True,
                 'message': f'貨架 {shelf_id} 數據庫已更新，但 MQTT 命令發送失敗',
                 'synced': False
+            })
+            
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/api/shelves/<shelf_id>/product')
+def api_get_shelf_product(shelf_id):
+    """API - 獲取貨架配置的商品資訊"""
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            SELECT product_name, product_length, stock_quantity
+            FROM shelves
+            WHERE shelf_id = ?
+        ''', (shelf_id,))
+        
+        result = cursor.fetchone()
+        conn.close()
+        
+        if result and result['product_name']:
+            return jsonify({
+                'success': True,
+                'product': {
+                    'product_name': result['product_name'],
+                    'product_length': result['product_length'],
+                    'stock_quantity': result['stock_quantity']
+                }
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'message': '尚未配置商品'
             })
             
     except Exception as e:
