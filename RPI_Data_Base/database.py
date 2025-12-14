@@ -133,7 +133,7 @@ def register_device(device_id: str, device_name: str = None, location: str = Non
             ''', (final_name, final_location, device_id))
         else:
             # 新設備，直接插入
-        cursor.execute('''
+            cursor.execute('''
                 INSERT INTO devices (device_id, device_name, location, status, last_seen)
             VALUES (?, ?, ?, 'online', CURRENT_TIMESTAMP)
         ''', (device_id, device_name or device_id, location))
@@ -363,7 +363,7 @@ def list_all_shelves(device_id: str = None) -> List[Dict]:
 
 # ==================== 感測器數據操作 ====================
 def save_sensor_data(device_id: str, shelf_id: str, distance_cm: float, 
-                     occupied: bool, fill_percent: float) -> bool:
+                     occupied: bool, fill_percent: float, stock_quantity: int = 0) -> bool:
     """儲存感測器數據到數據庫"""
     try:
         conn = sqlite3.connect(DB_FILE)
@@ -374,9 +374,9 @@ def save_sensor_data(device_id: str, shelf_id: str, distance_cm: float,
         
         cursor.execute('''
             INSERT INTO sensor_data 
-            (device_id, shelf_id, distance_cm, occupied, fill_percent, timestamp)
-            VALUES (?, ?, ?, ?, ?, ?)
-        ''', (device_id, shelf_id, distance_cm, int(occupied), fill_percent, current_time))
+            (device_id, shelf_id, distance_cm, occupied, fill_percent, stock_quantity, timestamp)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        ''', (device_id, shelf_id, distance_cm, int(occupied), fill_percent, stock_quantity, current_time))
         
         conn.commit()
         conn.close()

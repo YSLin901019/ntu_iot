@@ -48,8 +48,8 @@ class ShelfConfigManager:
             
             if msg.topic == TOPIC_SHELF_CONFIG_RESPONSE:
                 print(f"[ShelfConfig] 收到貨架配置: {payload}")
-            self.response_data = json.loads(payload)
-            self.response_received.set()
+                self.response_data = json.loads(payload)
+                self.response_received.set()
             elif msg.topic == "shelf/calibrate/response":
                 print(f"[Calibrate] 收到校正結果: {payload}")
                 self.calibrate_response = json.loads(payload)
@@ -85,31 +85,34 @@ class ShelfConfigManager:
         self.response_received.clear()
         self.connected.clear()
         
-        # 創建 MQTT 客戶端
-        self.client = mqtt.Client()
+        # 創建 MQTT 客戶端（使用唯一的 Client ID 避免衝突）
+        import random
+        client_id = f"RPI_ShelfConfig_{random.randint(1000, 9999)}"
+        self.client = mqtt.Client(client_id=client_id)
         self.client.on_connect = self._on_connect
         self.client.on_message = self._on_message
         
         try:
             # 連接到 MQTT Broker
             print(f"[ShelfConfig] 正在連接到 {MQTT_BROKER}:{MQTT_PORT}...")
-            self.client.connect(MQTT_BROKER, MQTT_PORT, MQTT_KEEPALIVE)
+            self.client.connect(MQTT_BROKER, MQTT_PORT, 60)  # 增加 keepalive 時間
             self.client.loop_start()
             
             # 等待連接建立和訂閱完成
-            if not self.connected.wait(3):
+            if not self.connected.wait(5):  # 增加連接超時時間
                 print(f"[ShelfConfig] 連接超時")
                 return None
             
-            print(f"[ShelfConfig] 連接已建立，等待 0.5 秒確保訂閱完成...")
-            time.sleep(0.5)
+            print(f"[ShelfConfig] 連接已建立，等待 1 秒確保訂閱完成...")
+            time.sleep(1)  # 增加等待時間確保訂閱完成
             
             # 發送查詢請求
             request = json.dumps({"device_id": device_id})
-            result = self.client.publish(TOPIC_SHELF_CONFIG_REQUEST, request)
+            result = self.client.publish(TOPIC_SHELF_CONFIG_REQUEST, request, qos=1)  # 使用 QoS 1
             
             if result.rc == mqtt.MQTT_ERR_SUCCESS:
                 print(f"[ShelfConfig] 已發送查詢請求: {request}")
+                result.wait_for_publish()  # 等待發送完成
             else:
                 print(f"[ShelfConfig] 發送請求失敗，錯誤碼: {result.rc}")
                 return None
@@ -118,6 +121,7 @@ class ShelfConfigManager:
             print(f"[ShelfConfig] 等待設備回應（超時 {timeout} 秒）...")
             if self.response_received.wait(timeout):
                 print(f"[ShelfConfig] 成功獲取貨架配置")
+                time.sleep(0.2)  # 稍微延遲以確保數據完整
                 return self.response_data
             else:
                 print(f"[ShelfConfig] 查詢超時（{timeout}秒），未收到設備回應")
@@ -131,7 +135,9 @@ class ShelfConfigManager:
             return None
         finally:
             if self.client:
+                time.sleep(0.3)  # 延遲以確保所有處理完成
                 self.client.loop_stop()
+                time.sleep(0.1)
                 self.client.disconnect()
                 print(f"[ShelfConfig] 已斷開 MQTT 連接")
     
@@ -154,29 +160,32 @@ class ShelfConfigManager:
         self.calibrate_received.clear()
         self.connected.clear()
         
-        # 創建 MQTT 客戶端
-        self.client = mqtt.Client()
+        # 創建 MQTT 客戶端（使用唯一的 Client ID 避免衝突）
+        import random
+        client_id = f"RPI_Calibrate_{random.randint(1000, 9999)}"
+        self.client = mqtt.Client(client_id=client_id)
         self.client.on_connect = self._on_connect
         self.client.on_message = self._on_message
         
         try:
             # 連接到 MQTT Broker
             print(f"[Calibrate] 正在連接到 {MQTT_BROKER}:{MQTT_PORT}...")
-            self.client.connect(MQTT_BROKER, MQTT_PORT, MQTT_KEEPALIVE)
+            self.client.connect(MQTT_BROKER, MQTT_PORT, 60)  # 增加 keepalive
             self.client.loop_start()
             
             # 等待連接建立
-            if not self.connected.wait(3):
+            if not self.connected.wait(5):  # 增加超時時間
                 return {'success': False, 'error': '連接 MQTT 超時'}
             
-            time.sleep(0.5)  # 確保訂閱完成
+            time.sleep(1)  # 確保訂閱完成
             
             # 發送校正命令
             command = f"calibrate {shelf_id}"
-            result = self.client.publish("shelf/command", command)
+            result = self.client.publish("shelf/command", command, qos=1)  # 使用 QoS 1
             
             if result.rc == mqtt.MQTT_ERR_SUCCESS:
                 print(f"[Calibrate] 已發送校正命令: {command}")
+                result.wait_for_publish()  # 等待發送完成
             else:
                 return {'success': False, 'error': f'發送命令失敗，錯誤碼: {result.rc}'}
             
@@ -192,6 +201,7 @@ class ShelfConfigManager:
                         from database import update_shelf_calibration
                         update_shelf_calibration(shelf_id, length)
                         
+                        time.sleep(0.2)  # 確保數據完整
                         return {
                             'success': True,
                             'shelf_length': length
@@ -213,7 +223,9 @@ class ShelfConfigManager:
             return {'success': False, 'error': str(e)}
         finally:
             if self.client:
+                time.sleep(0.3)  # 延遲以確保所有處理完成
                 self.client.loop_stop()
+                time.sleep(0.1)
                 self.client.disconnect()
                 print(f"[Calibrate] 已斷開 MQTT 連接")
 

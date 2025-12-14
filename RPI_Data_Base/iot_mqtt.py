@@ -99,15 +99,29 @@ def handle_sensor_message(payload: str, timestamp: str):
         # 分析數據
         occupied, fill_percent = analyze_shelf_data(shelf_id, distance_cm)
         
-        # 儲存到數據庫
-        save_sensor_data(device_id, shelf_id, distance_cm, occupied, fill_percent)
-        
         # 獲取貨架資訊
         shelf_info = get_shelf_info(shelf_id)
         
+        # 計算商品數量
+        stock_quantity = 0
+        if shelf_info:
+            shelf_length = shelf_info.get('shelf_length')
+            product_length = shelf_info.get('product_length')
+            
+            # 確保所有值都不是 None 且大於 0
+            if (shelf_length is not None and shelf_length > 0 and 
+                product_length is not None and product_length > 0 and 
+                distance_cm > 0):
+                occupied_length = shelf_length - distance_cm
+                if occupied_length > 0:
+                    stock_quantity = int(occupied_length / product_length)
+        
+        # 儲存到數據庫
+        save_sensor_data(device_id, shelf_id, distance_cm, occupied, fill_percent, stock_quantity)
+        
         # 顯示結果
         print_sensor_data(timestamp, device_id, shelf_id, distance_cm, 
-                         occupied, fill_percent, shelf_info)
+                         occupied, fill_percent, shelf_info, stock_quantity)
         
         # 上傳到 Firebase（如果啟用）
         if FIREBASE_ENABLED:
@@ -125,7 +139,7 @@ def handle_sensor_message(payload: str, timestamp: str):
 
 def print_sensor_data(timestamp: str, device_id: str, shelf_id: str, 
                       distance_cm: float, occupied: bool, fill_percent: float, 
-                      shelf_info: dict = None):
+                      shelf_info: dict = None, stock_quantity: int = 0):
     """格式化顯示感測器數據"""
     print(f"\n{Colors.HEADER}[{timestamp}]{Colors.ENDC}")
     print(f"{Colors.OKBLUE}[感測器數據]{Colors.ENDC}")
@@ -137,7 +151,8 @@ def print_sensor_data(timestamp: str, device_id: str, shelf_id: str,
         print(f"  商品名稱: {Colors.OKCYAN}{shelf_info['product_name']}{Colors.ENDC}")
         print(f"  商品ID: {shelf_info.get('product_id', 'N/A')}")
         print(f"  商品長度: {shelf_info.get('product_length', 'N/A')} cm")
-        print(f"  庫存數量: {shelf_info.get('stock_quantity', 0)}")
+        print(f"  貨架長度: {shelf_info.get('shelf_length', 'N/A')} cm")
+        print(f"  商品數量: {Colors.BOLD}{stock_quantity}{Colors.ENDC}")
     
     print(f"  距離: {distance_cm:.1f} cm")
     

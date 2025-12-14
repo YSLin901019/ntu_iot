@@ -235,9 +235,15 @@ async function enableShelf(shelfId) {
             if (card) {
                 card.className = 'shelf-card enabled';
                 card.querySelector('h4').innerHTML = `✅ 貨架 ${shelfId}`;
-                card.querySelector('button').className = 'btn btn-danger';
-                card.querySelector('button').textContent = '停用';
-                card.querySelector('button').setAttribute('onclick', `disableShelf('${shelfId}')`);
+                
+                // 找到所有按鈕
+                const buttons = card.querySelectorAll('button');
+                // 第二個按鈕是啟用/停用按鈕（第一個是校正，第三個是配置商品）
+                if (buttons[1]) {
+                    buttons[1].className = 'btn btn-danger';
+                    buttons[1].textContent = '停用';
+                    buttons[1].setAttribute('onclick', `disableShelf('${shelfId}')`);
+                }
                 
                 // 更新狀態文本
                 const statusText = card.querySelector('p').innerHTML;
@@ -271,9 +277,15 @@ async function disableShelf(shelfId) {
             if (card) {
                 card.className = 'shelf-card disabled';
                 card.querySelector('h4').innerHTML = `❌ 貨架 ${shelfId}`;
-                card.querySelector('button').className = 'btn btn-success';
-                card.querySelector('button').textContent = '啟用';
-                card.querySelector('button').setAttribute('onclick', `enableShelf('${shelfId}')`);
+                
+                // 找到所有按鈕
+                const buttons = card.querySelectorAll('button');
+                // 第二個按鈕是啟用/停用按鈕（第一個是校正，第三個是配置商品）
+                if (buttons[1]) {
+                    buttons[1].className = 'btn btn-success';
+                    buttons[1].textContent = '啟用';
+                    buttons[1].setAttribute('onclick', `enableShelf('${shelfId}')`);
+                }
                 
                 // 更新狀態文本
                 const statusText = card.querySelector('p').innerHTML;

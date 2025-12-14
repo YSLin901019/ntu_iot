@@ -200,6 +200,7 @@ function updateDataTable(data) {
                         <th>區域</th>
                         <th>貨架</th>
                         <th>商品</th>
+                        <th>數量</th>
                         <th>距離 (cm)</th>
                         <th>占用狀態</th>
                         <th>填充率</th>
@@ -225,6 +226,7 @@ function updateDataTable(data) {
         
         const productInfo = item.product_name || '<span style="color: #999;">未配置</span>';
         const locationInfo = item.device_location || '<span style="color: #999;">未分配</span>';
+        const stockQuantity = item.stock_quantity || 0;
         
         html += `
             <tr class="${rowClass}">
@@ -233,6 +235,7 @@ function updateDataTable(data) {
                 <td><span style="color: #667eea; font-weight: bold;">${locationInfo}</span></td>
                 <td><strong>${item.shelf_id}</strong></td>
                 <td>${productInfo}</td>
+                <td style="text-align: center;"><strong style="color: #667eea;">${stockQuantity}</strong></td>
                 <td style="text-align: right;">${item.distance_cm.toFixed(1)}</td>
                 <td>${occupiedBadge}</td>
                 <td>
