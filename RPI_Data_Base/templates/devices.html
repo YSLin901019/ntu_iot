@@ -1,98 +1,297 @@
 {% extends "base.html" %}
 
-{% block title %}設備管理 - 資料庫管理系統{% endblock %}
+{% block title %}設備管理 - 智能倉儲管理系統{% endblock %}
 
 {% block content %}
-<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-    <h2>📱 設備管理</h2>
-    <div style="display: flex; gap: 10px;">
-        <button onclick="checkAllHeartbeats()" class="btn btn-success" id="heartbeat-btn">
-            ❤️ 檢查所有設備狀態
-        </button>
-        <a href="{{ url_for('add_device') }}" class="btn btn-primary">➕ 新增設備</a>
-    </div>
-</div>
-
-<div id="heartbeat-status" style="display: none; background: #d1ecf1; padding: 15px; border-radius: 5px; margin-bottom: 20px; border-left: 4px solid #17a2b8;">
-    <div style="display: flex; align-items: center; gap: 10px;">
-        <div class="spinner" style="width: 20px; height: 20px; border: 3px solid #f3f3f3; border-top: 3px solid #17a2b8; border-radius: 50%; animation: spin 1s linear infinite;"></div>
-        <span id="heartbeat-status-text">正在檢查設備狀態...</span>
-    </div>
-</div>
-
-<!-- 未分配區域的設備提示 -->
-<div id="unassigned-alert" style="display: none; background: #fff3cd; padding: 15px; border-left: 4px solid #ffc107; border-radius: 5px; margin-bottom: 20px;">
-    <strong style="color: #856404;">⚠️ 有設備尚未指定區域</strong>
-    <p style="color: #856404; margin: 5px 0;">以下設備已連線但尚未指定負責區域：</p>
-    <div id="unassigned-list" style="margin-top: 10px;"></div>
-</div>
-
-{% if devices %}
-<table>
-    <thead>
-        <tr>
-            <th>設備 ID</th>
-            <th>設備名稱</th>
-            <th>負責區域</th>
-            <th>狀態</th>
-            <th>貨架數量</th>
-            <th>最後上線時間</th>
-            <th>操作</th>
-        </tr>
-    </thead>
-    <tbody>
-        {% for device in devices %}
-        <tr>
-            <td><strong>{{ device.device_id }}</strong></td>
-            <td>{{ device.device_name }}</td>
-            <td>
-                {% if device.location %}
-                <span class="badge badge-info">{{ device.location }}</span>
-                {% else %}
-                <span class="badge" style="background: #e9ecef; color: #6c757d;">未指定區域</span>
-                {% endif %}
-            </td>
-            <td>
-                {% if device.status == 'online' %}
-                <span class="badge badge-success">在線</span>
-                {% else %}
-                <span class="badge badge-danger">離線</span>
-                {% endif %}
-            </td>
-            <td>{{ device.shelf_count }}</td>
-            <td>{{ device.last_seen or 'N/A' }}</td>
-            <td>
-                <div class="action-buttons">
-                    <button onclick="checkSingleHeartbeat('{{ device.device_id }}')" 
-                            class="btn btn-success" style="padding: 5px 15px;" title="檢查設備狀態">
-                        ❤️
-                    </button>
-                    <a href="{{ url_for('edit_device', device_id=device.device_id) }}" 
-                       class="btn btn-primary" style="padding: 5px 15px;">編輯區域</a>
-                    <button onclick="confirmDelete('設備', '{{ device.device_id }}', '/api/devices/{{ device.device_id }}')" 
-                            class="btn btn-danger" style="padding: 5px 15px;">刪除</button>
-                </div>
-            </td>
-        </tr>
-        {% endfor %}
-    </tbody>
-</table>
-{% else %}
-<div class="empty-state">
-    <p style="font-size: 1.2em;">📱 尚無設備記錄</p>
-    <p>請點擊「新增設備」按鈕來新增第一個設備</p>
-</div>
-{% endif %}
-{% endblock %}
-
-{% block extra_script %}
 <style>
     @keyframes spin {
         0% { transform: rotate(0deg); }
         100% { transform: rotate(360deg); }
     }
+    
+    .warehouse-header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        padding: 30px;
+        border-radius: 10px;
+        color: white;
+        margin-bottom: 30px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    }
+    
+    .warehouse-header h2 {
+        margin: 0 0 10px 0;
+        font-size: 28px;
+        font-weight: 600;
+    }
+    
+    .warehouse-header p {
+        margin: 0;
+        opacity: 0.9;
+        font-size: 14px;
+    }
+    
+    .device-table {
+        background: white;
+        border-radius: 10px;
+        overflow: hidden;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.08);
+    }
+    
+    .device-table table {
+        margin: 0;
+    }
+    
+    .device-table thead {
+        background: #f8f9fa;
+    }
+    
+    .device-table thead th {
+        color: #495057;
+        font-weight: 600;
+        text-transform: uppercase;
+        font-size: 12px;
+        letter-spacing: 0.5px;
+    }
+    
+    .device-id {
+        font-family: 'Courier New', monospace;
+        font-weight: 600;
+        color: #2d3748;
+    }
+    
+    .location-badge {
+        display: inline-block;
+        padding: 6px 12px;
+        border-radius: 20px;
+        font-size: 13px;
+        font-weight: 500;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+    }
+    
+    .location-empty {
+        display: inline-block;
+        padding: 6px 12px;
+        border-radius: 20px;
+        font-size: 13px;
+        background: #e9ecef;
+        color: #6c757d;
+    }
+    
+    .status-indicator {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    
+    .status-dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        animation: pulse 2s infinite;
+    }
+    
+    .status-dot.online {
+        background: #28a745;
+        box-shadow: 0 0 0 2px rgba(40, 167, 69, 0.2);
+    }
+    
+    .status-dot.offline {
+        background: #dc3545;
+        box-shadow: 0 0 0 2px rgba(220, 53, 69, 0.2);
+    }
+    
+    @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.5; }
+    }
+    
+    .shelf-count {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 4px 10px;
+        background: #e7f3ff;
+        border-radius: 15px;
+        color: #0056b3;
+        font-weight: 600;
+        font-size: 14px;
+    }
+    
+    .action-buttons {
+        display: flex;
+        gap: 8px;
+        justify-content: flex-end;
+    }
+    
+    .btn-icon {
+        padding: 8px 12px;
+        border-radius: 6px;
+        border: none;
+        cursor: pointer;
+        font-size: 16px;
+        transition: all 0.2s;
+    }
+    
+    .btn-icon:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+    }
+    
+    .alert-warning-custom {
+        background: linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%);
+        padding: 20px;
+        border-left: 4px solid #ffc107;
+        border-radius: 8px;
+        margin-bottom: 20px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    }
+    
+    .loading-status {
+        background: linear-gradient(135deg, #d1ecf1 0%, #b8daff 100%);
+        padding: 15px 20px;
+        border-radius: 8px;
+        margin-bottom: 20px;
+        display: flex;
+        align-items: center;
+        gap: 15px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    }
+    
+    .empty-warehouse {
+        text-align: center;
+        padding: 60px 20px;
+        background: white;
+        border-radius: 10px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.08);
+    }
+    
+    .empty-warehouse-icon {
+        font-size: 80px;
+        margin-bottom: 20px;
+        opacity: 0.5;
+    }
 </style>
 
+<div class="warehouse-header">
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+        <div>
+            <h2>🏭 設備監控中心</h2>
+            <p>實時監控所有倉儲感測設備的運行狀態</p>
+        </div>
+        <div style="display: flex; gap: 10px;">
+            <button onclick="checkAllHeartbeats()" class="btn btn-success" id="heartbeat-btn" style="background: white; color: #667eea; border: 2px solid white;">
+                ❤️ 檢查所有設備
+            </button>
+        </div>
+    </div>
+</div>
+
+<div id="heartbeat-status" class="loading-status" style="display: none;">
+    <div class="spinner" style="width: 20px; height: 20px; border: 3px solid #f3f3f3; border-top: 3px solid #17a2b8; border-radius: 50%; animation: spin 1s linear infinite;"></div>
+    <span id="heartbeat-status-text" style="font-weight: 500;">正在檢查設備狀態...</span>
+</div>
+
+<!-- 未分配區域的設備提示 -->
+<div id="unassigned-alert" class="alert-warning-custom" style="display: none;">
+    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 15px;">
+        <span style="font-size: 24px;">⚠️</span>
+        <strong style="color: #856404; font-size: 16px;">有設備尚未指定區域</strong>
+    </div>
+    <p style="color: #856404; margin: 0 0 15px 34px;">以下設備已連線但尚未指定負責區域：</p>
+    <div id="unassigned-list"></div>
+</div>
+
+{% if devices %}
+<div class="device-table">
+    <table>
+        <thead>
+            <tr>
+                <th style="width: 25%;">設備 ID</th>
+                <th style="width: 20%;">負責區域</th>
+                <th style="width: 15%;">狀態</th>
+                <th style="width: 15%;">貨架數量</th>
+                <th style="width: 20%;">最後上線</th>
+                <th style="width: 15%; text-align: right;">操作</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for device in devices %}
+            <tr>
+                <td>
+                    <div class="device-id">{{ device.device_id }}</div>
+                </td>
+                <td>
+                    {% if device.location %}
+                    <span class="location-badge">📍 {{ device.location }}</span>
+                    {% else %}
+                    <span class="location-empty">未指定</span>
+                    {% endif %}
+                </td>
+                <td>
+                    <div class="status-indicator">
+                        {% if device.status == 'online' %}
+                        <span class="status-dot online"></span>
+                        <span style="color: #28a745; font-weight: 600;">在線</span>
+                        {% else %}
+                        <span class="status-dot offline"></span>
+                        <span style="color: #dc3545; font-weight: 600;">離線</span>
+                        {% endif %}
+                    </div>
+                </td>
+                <td>
+                    <span class="shelf-count">
+                        🗄️ {{ device.shelf_count }}
+                    </span>
+                </td>
+                <td style="color: #6c757d; font-size: 13px;">
+                    {{ device.last_seen or 'N/A' }}
+                </td>
+                <td>
+                    <div class="action-buttons">
+                        <button onclick="checkSingleHeartbeat('{{ device.device_id }}')" 
+                                class="btn btn-success btn-icon" 
+                                title="檢查設備狀態"
+                                style="padding: 8px 12px;">
+                            ❤️
+                        </button>
+                        <a href="{{ url_for('edit_device', device_id=device.device_id) }}" 
+                           class="btn btn-primary btn-icon" 
+                           style="padding: 8px 12px;"
+                           title="編輯區域">
+                            📍
+                        </a>
+                        <button onclick="confirmDelete('設備', '{{ device.device_id }}', '/api/devices/{{ device.device_id }}')" 
+                                class="btn btn-danger btn-icon" 
+                                style="padding: 8px 12px;"
+                                title="刪除設備">
+                            🗑️
+                        </button>
+                    </div>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="empty-warehouse">
+    <div class="empty-warehouse-icon">🏭</div>
+    <h3 style="color: #495057; margin-bottom: 10px;">尚未連接任何設備</h3>
+    <p style="color: #6c757d; margin-bottom: 25px;">設備將在首次連線時自動註冊到系統</p>
+    <div style="padding: 20px; background: #f8f9fa; border-radius: 8px; display: inline-block;">
+        <p style="color: #495057; margin: 0; text-align: left;">
+            <strong>💡 提示：</strong><br>
+            1. 確保 ESP32 設備已燒錄正確的韌體<br>
+            2. 設備需連接到相同的 WiFi 網路<br>
+            3. 設備會自動透過 MQTT 連接到系統
+        </p>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_script %}
 <script>
     // 檢查所有設備心跳
     async function checkAllHeartbeats() {
@@ -101,7 +300,7 @@
         const statusText = document.getElementById('heartbeat-status-text');
         
         btn.disabled = true;
-        statusDiv.style.display = 'block';
+        statusDiv.style.display = 'flex';
         statusText.textContent = '正在檢查所有設備狀態...';
         
         try {
@@ -109,16 +308,16 @@
             const data = await response.json();
             
             if (data.success) {
-                statusText.textContent = '設備狀態已更新！正在刷新頁面...';
+                statusText.textContent = '✅ 設備狀態已更新！正在刷新頁面...';
                 setTimeout(() => {
                     location.reload();
                 }, 1000);
             } else {
-                alert('檢查失敗：' + data.error);
+                alert('❌ 檢查失敗：' + data.error);
                 statusDiv.style.display = 'none';
             }
         } catch (error) {
-            alert('發生錯誤：' + error);
+            alert('❌ 發生錯誤：' + error);
             statusDiv.style.display = 'none';
         } finally {
             btn.disabled = false;
@@ -133,16 +332,16 @@
             
             if (data.success) {
                 if (data.online) {
-                    alert(`設備 ${deviceId} 在線✅\n最後上線時間: ${data.last_seen}`);
+                    alert(`✅ 設備 ${deviceId} 在線\n\n最後上線時間: ${data.last_seen}`);
                 } else {
-                    alert(`設備 ${deviceId} 離線❌`);
+                    alert(`❌ 設備 ${deviceId} 離線`);
                 }
                 location.reload();
             } else {
-                alert('檢查失敗：' + data.error);
+                alert('❌ 檢查失敗：' + data.error);
             }
         } catch (error) {
-            alert('發生錯誤：' + error);
+            alert('❌ 發生錯誤：' + error);
         }
     }
     
@@ -154,20 +353,27 @@
                 const alert = document.getElementById('unassigned-alert');
                 const list = document.getElementById('unassigned-list');
                 
-                let html = '<div style="display: flex; flex-direction: column; gap: 10px;">';
+                let html = '<div style="display: flex; flex-direction: column; gap: 10px; margin-left: 34px;">';
                 data.devices.forEach(device => {
-                    const statusBadge = device.status === 'online' 
-                        ? '<span class="badge badge-success">在線</span>' 
-                        : '<span class="badge badge-danger">離線</span>';
+                    const statusColor = device.status === 'online' ? '#28a745' : '#dc3545';
+                    const statusText = device.status === 'online' ? '在線' : '離線';
+                    const statusDot = device.status === 'online' ? '🟢' : '🔴';
                     
                     html += `
-                        <div style="display: flex; justify-content: space-between; align-items: center; background: white; padding: 10px; border-radius: 5px;">
-                            <div>
-                                <strong>${device.device_id}</strong> - ${device.device_name} 
-                                ${statusBadge}
+                        <div style="display: flex; justify-content: space-between; align-items: center; background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+                            <div style="display: flex; align-items: center; gap: 15px;">
+                                ${statusDot}
+                                <div>
+                                    <div style="font-family: 'Courier New', monospace; font-weight: 600; color: #2d3748; margin-bottom: 4px;">
+                                        ${device.device_id}
+                                    </div>
+                                    <div style="font-size: 13px; color: #6c757d;">
+                                        狀態: <span style="color: ${statusColor}; font-weight: 600;">${statusText}</span>
+                                    </div>
+                                </div>
                             </div>
-                            <a href="/devices/${device.device_id}/edit" class="btn btn-primary" style="padding: 5px 15px;">
-                                指定區域
+                            <a href="/devices/${device.device_id}/edit" class="btn btn-primary" style="padding: 8px 20px;">
+                                📍 指定區域
                             </a>
                         </div>
                     `;
@@ -181,4 +387,3 @@
         .catch(error => console.error('Error:', error));
 </script>
 {% endblock %}
-
