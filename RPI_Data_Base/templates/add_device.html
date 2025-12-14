@@ -1,109 +1,270 @@
 {% extends "base.html" %}
 
-{% block title %}新增設備 - 資料庫管理系統{% endblock %}
+{% block title %}新增設備 - 智能倉儲管理系統{% endblock %}
 
 {% block content %}
-<h2>➕ 新增 ESP32 設備</h2>
-
-<div style="background: #e7f3ff; padding: 20px; border-left: 4px solid #667eea; border-radius: 5px; margin: 20px 0;">
-    <h4 style="color: #667eea; margin-bottom: 10px;">💡 兩種新增方式</h4>
-    <ol style="color: #495057; line-height: 1.8;">
-        <li><strong>自動探測</strong>：點擊「掃描可用設備」按鈕，系統會自動發現所有在線的 ESP32S3</li>
-        <li><strong>手動輸入</strong>：如果探測失敗，可以手動填寫設備資訊</li>
-    </ol>
-</div>
-
-<!-- 設備探測區域 -->
-<div style="background: #f8f9fa; padding: 20px; border-radius: 10px; margin-bottom: 30px;">
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-        <h3 style="color: #495057; margin: 0;">🔍 自動探測設備</h3>
-        <button onclick="scanDevices()" id="scan-btn" class="btn btn-primary">
-            <span id="scan-text">📡 掃描可用設備</span>
-        </button>
-    </div>
-    
-    <div id="scan-status" style="display: none; padding: 15px; border-radius: 5px; margin-bottom: 15px;">
-        <div style="display: flex; align-items: center; gap: 10px;">
-            <div class="spinner" style="width: 20px; height: 20px; border: 3px solid #f3f3f3; border-top: 3px solid #667eea; border-radius: 50%; animation: spin 1s linear infinite;"></div>
-            <span id="scan-status-text">正在掃描設備...</span>
-        </div>
-    </div>
-    
-    <div id="discovered-devices" style="display: none;">
-        <h4 style="color: #495057; margin-bottom: 10px;">發現的設備：</h4>
-        <div id="devices-list"></div>
-    </div>
-    
-    <div id="no-devices" style="display: none; padding: 15px; background: #fff3cd; border-radius: 5px;">
-        <strong style="color: #856404;">⚠️ 未發現設備</strong>
-        <p style="color: #856404; margin: 5px 0;">請確認：</p>
-        <ul style="color: #856404; padding-left: 20px;">
-            <li>ESP32S3 已開機並連接到網路</li>
-            <li>ESP32S3 已連接到 MQTT Broker</li>
-            <li>ESP32S3 程式已正確設定</li>
-        </ul>
-    </div>
-</div>
-
-<!-- 手動新增表單 -->
-<div style="background: #f8f9fa; padding: 20px; border-radius: 10px;">
-    <h3 style="color: #495057; margin-bottom: 15px;">✍️ 手動輸入設備資訊</h3>
-    
-    <form method="POST" style="max-width: 600px;">
-        <input type="hidden" id="from_discovery" name="from_discovery" value="false">
-        
-        <div class="form-group">
-            <label for="device_id">設備 ID *</label>
-            <input type="text" id="device_id" name="device_id" required 
-                   placeholder="例如: ESP32_001">
-        </div>
-        
-        <div class="form-group">
-            <label for="device_name">設備名稱 *</label>
-            <input type="text" id="device_name" name="device_name" required 
-                   placeholder="例如: ESP32 設備 1">
-        </div>
-        
-        <div class="form-group">
-            <label for="location">設備位置</label>
-            <input type="text" id="location" name="location" 
-                   placeholder="例如: 倉庫 A 區">
-        </div>
-        
-        <div class="action-buttons">
-            <button type="submit" class="btn btn-primary">✓ 新增設備</button>
-            <a href="{{ url_for('devices') }}" class="btn" style="background: #6c757d; color: white;">取消</a>
-        </div>
-    </form>
-</div>
-{% endblock %}
-
-{% block extra_style %}
 <style>
     @keyframes spin {
         0% { transform: rotate(0deg); }
         100% { transform: rotate(360deg); }
     }
     
+    .page-header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        padding: 30px;
+        border-radius: 10px;
+        color: white;
+        margin-bottom: 30px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    }
+    
+    .page-header h2 {
+        margin: 0 0 10px 0;
+        font-size: 28px;
+        font-weight: 600;
+    }
+    
+    .info-box {
+        background: linear-gradient(135deg, #e7f3ff 0%, #f0e7ff 100%);
+        padding: 25px;
+        border-radius: 10px;
+        border-left: 4px solid #667eea;
+        margin-bottom: 30px;
+    }
+    
+    .info-box h4 {
+        color: #667eea;
+        margin: 0 0 15px 0;
+        font-size: 18px;
+        font-weight: 600;
+    }
+    
+    .info-box ol {
+        margin: 0;
+        padding-left: 20px;
+        color: #495057;
+        line-height: 1.8;
+    }
+    
+    .scan-section {
+        background: white;
+        padding: 30px;
+        border-radius: 10px;
+        margin-bottom: 30px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+    
+    .scan-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+    }
+    
+    .scan-header h3 {
+        color: #2d3748;
+        margin: 0;
+        font-size: 20px;
+        font-weight: 600;
+    }
+    
     .device-card {
         background: white;
-        padding: 15px;
-        border-radius: 5px;
-        margin-bottom: 10px;
+        padding: 20px;
+        border-radius: 8px;
+        margin-bottom: 15px;
         border: 2px solid #e9ecef;
         transition: all 0.3s;
+        cursor: pointer;
     }
     
     .device-card:hover {
         border-color: #667eea;
-        box-shadow: 0 2px 8px rgba(102, 126, 234, 0.2);
+        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.2);
+        transform: translateY(-2px);
     }
     
     .device-card.selected {
         border-color: #667eea;
-        background: #f0f4ff;
+        background: linear-gradient(135deg, #f0f4ff 0%, #faf0ff 100%);
+    }
+    
+    .device-info {
+        flex: 1;
+    }
+    
+    .device-title {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 12px;
+    }
+    
+    .device-id {
+        font-family: 'Courier New', monospace;
+        font-size: 1.2em;
+        font-weight: 700;
+        color: #2d3748;
+    }
+    
+    .device-details {
+        color: #6c757d;
+        font-size: 0.95em;
+        line-height: 1.8;
+    }
+    
+    .device-details div {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    
+    .shelves-list {
+        margin-top: 12px;
+        padding-top: 12px;
+        border-top: 1px solid #e9ecef;
+    }
+    
+    .form-section {
+        background: white;
+        padding: 30px;
+        border-radius: 10px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+    
+    .form-section h3 {
+        color: #2d3748;
+        margin: 0 0 25px 0;
+        font-size: 20px;
+        font-weight: 600;
+    }
+    
+    .scan-status {
+        background: linear-gradient(135deg, #d1ecf1 0%, #b8daff 100%);
+        padding: 20px;
+        border-radius: 8px;
+        margin-bottom: 20px;
+        display: flex;
+        align-items: center;
+        gap: 15px;
+    }
+    
+    .no-devices {
+        background: linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%);
+        padding: 20px;
+        border-radius: 8px;
+        border-left: 4px solid #ffc107;
+    }
+    
+    .no-devices strong {
+        color: #856404;
+        font-size: 16px;
+    }
+    
+    .no-devices p {
+        color: #856404;
+        margin: 10px 0 5px 0;
+    }
+    
+    .no-devices ul {
+        color: #856404;
+        padding-left: 25px;
+        margin: 5px 0 0 0;
     }
 </style>
+
+<div class="page-header">
+    <h2>➕ 新增倉儲設備</h2>
+    <p>透過自動探測或手動輸入方式新增 ESP32 感測設備</p>
+</div>
+
+{% if error %}
+<div style="background: linear-gradient(135deg, #f8d7da 0%, #f5c2c7 100%); padding: 20px; border-radius: 8px; border-left: 4px solid #dc3545; margin-bottom: 20px;">
+    <div style="display: flex; align-items: center; gap: 10px;">
+        <span style="font-size: 24px;">❌</span>
+        <div>
+            <strong style="color: #721c24; font-size: 16px;">操作失敗</strong>
+            <p style="color: #721c24; margin: 5px 0 0 0;">{{ error }}</p>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<div class="info-box">
+    <h4>💡 設備新增方式</h4>
+    <ol>
+        <li><strong>自動探測（推薦）</strong>：點擊「掃描設備」按鈕，系統會自動發現所有在線的 ESP32S3 設備</li>
+        <li><strong>手動輸入</strong>：如果探測失敗或需要離線新增，可以手動填寫設備資訊</li>
+    </ol>
+</div>
+
+<!-- 設備探測區域 -->
+<div class="scan-section">
+    <div class="scan-header">
+        <h3>🔍 自動探測設備</h3>
+        <button onclick="scanDevices()" id="scan-btn" class="btn btn-primary">
+            <span id="scan-text">📡 掃描設備</span>
+        </button>
+    </div>
+    
+    <div id="scan-status" class="scan-status" style="display: none;">
+        <div class="spinner" style="width: 20px; height: 20px; border: 3px solid #f3f3f3; border-top: 3px solid #667eea; border-radius: 50%; animation: spin 1s linear infinite;"></div>
+        <span id="scan-status-text" style="font-weight: 500;">正在掃描網路中的設備...</span>
+    </div>
+    
+    <div id="discovered-devices" style="display: none;">
+        <h4 style="color: #495057; margin-bottom: 15px; font-size: 16px;">📱 發現的設備：</h4>
+        <div id="devices-list"></div>
+    </div>
+    
+    <div id="no-devices" class="no-devices" style="display: none;">
+        <strong>⚠️ 未發現任何設備</strong>
+        <p>請檢查以下事項：</p>
+        <ul>
+            <li>ESP32S3 已開機並連接到 WiFi</li>
+            <li>ESP32S3 已成功連接到 MQTT Broker</li>
+            <li>ESP32S3 韌體版本正確且運行正常</li>
+            <li>網路環境允許設備通訊</li>
+        </ul>
+    </div>
+</div>
+
+<!-- 手動新增表單 -->
+<div class="form-section">
+    <h3>✍️ 手動輸入設備資訊</h3>
+    
+    <form method="POST" style="max-width: 600px;">
+        <input type="hidden" id="from_discovery" name="from_discovery" value="false">
+        
+        <div class="form-group">
+            <label for="device_id">設備 ID * <small style="color: #6c757d;">(必須唯一)</small></label>
+            <input type="text" id="device_id" name="device_id" required 
+                   placeholder="例如: ESP32S3_A1B2C3D4"
+                   style="font-family: 'Courier New', monospace;">
+        </div>
+        
+        <div class="form-group">
+            <label for="device_name">設備名稱 *</label>
+            <input type="text" id="device_name" name="device_name" required 
+                   placeholder="例如: 倉庫 A 區感測器">
+        </div>
+        
+        <div class="form-group">
+            <label for="location">負責區域 <small style="color: #6c757d;">(選填，可稍後指定)</small></label>
+            <input type="text" id="location" name="location" 
+                   placeholder="例如: 倉庫 A 區">
+        </div>
+        
+        <div class="action-buttons" style="margin-top: 30px;">
+            <button type="submit" class="btn btn-primary" style="padding: 12px 30px;">
+                ✓ 新增設備
+            </button>
+            <a href="{{ url_for('devices') }}" class="btn" style="background: #6c757d; color: white; padding: 12px 30px;">
+                取消
+            </a>
+        </div>
+    </form>
+</div>
 {% endblock %}
 
 {% block extra_script %}
@@ -124,7 +285,7 @@
         
         // 顯示掃描狀態
         scanBtn.disabled = true;
-        scanStatus.style.display = 'block';
+        scanStatus.style.display = 'flex';
         document.getElementById('scan-text').textContent = '掃描中...';
         
         try {
@@ -139,12 +300,12 @@
                 noDevicesDiv.style.display = 'block';
             }
         } catch (error) {
-            alert('設備探測失敗：' + error);
+            alert('❌ 設備探測失敗：' + error.message);
             noDevicesDiv.style.display = 'block';
         } finally {
             scanBtn.disabled = false;
             scanStatus.style.display = 'none';
-            document.getElementById('scan-text').textContent = '📡 重新掃描';
+            document.getElementById('scan-text').textContent = '🔄 重新掃描';
         }
     }
     
@@ -159,27 +320,29 @@
             const uptime = formatUptime(device.uptime_ms);
             
             card.innerHTML = `
-                <div style="display: flex; justify-content: space-between; align-items: start;">
-                    <div style="flex: 1;">
-                        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
-                            <strong style="font-size: 1.1em;">${device.device_id}</strong>
-                            <span class="badge badge-success">在線</span>
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 20px;">
+                    <div class="device-info">
+                        <div class="device-title">
+                            <span class="device-id">${device.device_id}</span>
+                            <span class="badge badge-success">🟢 在線</span>
                         </div>
-                        <div style="color: #6c757d; font-size: 0.9em; line-height: 1.6;">
-                            <div>📱 設備名稱: ${device.device_name}</div>
-                            <div>🗂️ 貨架數量: ${device.shelf_count} 個</div>
-                            <div>📊 WiFi 信號: ${device.wifi_signal} dBm</div>
-                            <div>⏱️ 運行時間: ${uptime}</div>
-                            ${device.shelves.length > 0 ? `
-                                <div style="margin-top: 8px;">
-                                    <strong>可用貨架:</strong> 
-                                    ${device.shelves.map(s => `<span class="badge badge-info" style="margin: 2px;">${s}</span>`).join('')}
+                        <div class="device-details">
+                            <div>📱 設備名稱: <strong>${device.device_name}</strong></div>
+                            <div>🗂️ 貨架數量: <strong>${device.shelf_count}</strong> 個</div>
+                            <div>📡 WiFi 信號: <strong>${device.wifi_signal || 'N/A'}</strong> dBm</div>
+                            <div>⏱️ 運行時間: <strong>${uptime}</strong></div>
+                            ${device.shelves && device.shelves.length > 0 ? `
+                                <div class="shelves-list">
+                                    <strong>🗄️ 已啟用貨架:</strong><br>
+                                    <div style="margin-top: 6px;">
+                                        ${device.shelves.map(s => `<span class="badge badge-info" style="margin: 3px;">${s}</span>`).join('')}
+                                    </div>
                                 </div>
                             ` : ''}
                         </div>
                     </div>
-                    <button type="button" class="btn btn-primary" style="padding: 8px 20px;">
-                        選擇此設備
+                    <button type="button" class="btn btn-primary" style="padding: 10px 24px; white-space: nowrap;">
+                        選擇此設備 →
                     </button>
                 </div>
             `;
@@ -207,7 +370,19 @@
         cardElement.classList.add('selected');
         
         // 滾動到表單
-        document.querySelector('form').scrollIntoView({ behavior: 'smooth', block: 'center' });
+        setTimeout(() => {
+            document.querySelector('.form-section').scrollIntoView({ 
+                behavior: 'smooth', 
+                block: 'center' 
+            });
+        }, 100);
+        
+        // 高亮表單
+        const formSection = document.querySelector('.form-section');
+        formSection.style.boxShadow = '0 0 0 3px rgba(102, 126, 234, 0.3)';
+        setTimeout(() => {
+            formSection.style.boxShadow = '0 2px 8px rgba(0,0,0,0.08)';
+        }, 2000);
     }
     
     function formatUptime(ms) {
@@ -215,8 +390,7 @@
         const hours = Math.floor(seconds / 3600);
         const minutes = Math.floor((seconds % 3600) / 60);
         const secs = seconds % 60;
-        return `${hours}時${minutes}分${secs}秒`;
+        return `${hours}時 ${minutes}分 ${secs}秒`;
     }
 </script>
 {% endblock %}
-

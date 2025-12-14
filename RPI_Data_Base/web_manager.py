@@ -74,6 +74,10 @@ def index():
         cursor.execute('SELECT COUNT(*) as total FROM shelves')
         stats['shelf_count'] = cursor.fetchone()['total']
         
+        # 活躍貨架統計（已啟用的貨架）
+        cursor.execute('SELECT COUNT(*) as active FROM shelves WHERE enabled = 1')
+        stats['active_shelves'] = cursor.fetchone()['active']
+        
         cursor.execute('SELECT COUNT(*) as with_product FROM shelves WHERE product_id IS NOT NULL')
         stats['shelves_with_products'] = cursor.fetchone()['with_product']
         
@@ -139,6 +143,15 @@ def add_device():
             conn = get_db()
             cursor = conn.cursor()
             
+            # 檢查設備是否已存在
+            cursor.execute('SELECT device_id FROM devices WHERE device_id = ?', (device_id,))
+            existing = cursor.fetchone()
+            
+            if existing:
+                conn.close()
+                return render_template('add_device.html', 
+                    error=f'設備 {device_id} 已存在，請使用不同的設備 ID 或先刪除舊設備')
+            
             # 如果是從探測掃描來的，設為在線狀態
             status = 'online' if from_discovery else 'offline'
             
@@ -151,10 +164,12 @@ def add_device():
             conn.close()
             
             return redirect(url_for('devices'))
-        except sqlite3.IntegrityError:
-            return "設備 ID 已存在", 400
+        except sqlite3.IntegrityError as e:
+            return render_template('add_device.html', 
+                error=f'設備 ID 重複或資料格式錯誤: {str(e)}')
         except Exception as e:
-            return f"錯誤: {e}", 500
+            return render_template('add_device.html', 
+                error=f'新增設備失敗: {str(e)}')
     
     return render_template('add_device.html')
 
@@ -201,15 +216,27 @@ def edit_device(device_id):
 
 @app.route('/api/devices/<device_id>', methods=['DELETE'])
 def delete_device(device_id):
-    """刪除設備"""
+    """刪除設備（級聯刪除關聯資料）"""
     try:
         conn = get_db()
         cursor = conn.cursor()
+        
+        # 1. 刪除關聯的感測器數據
+        cursor.execute('DELETE FROM sensor_data WHERE device_id = ?', (device_id,))
+        
+        # 2. 刪除關聯的貨架配置
+        cursor.execute('DELETE FROM shelves WHERE device_id = ?', (device_id,))
+        
+        # 3. 刪除設備本身
         cursor.execute('DELETE FROM devices WHERE device_id = ?', (device_id,))
+        
         conn.commit()
         conn.close()
+        
+        print(f"✓ 已刪除設備 {device_id} 及其所有關聯資料")
         return jsonify({'success': True})
     except Exception as e:
+        print(f"✗ 刪除設備失敗: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
 # ==================== 路由 - 商品管理 ====================
@@ -609,7 +636,8 @@ def api_sensor_data():
         cursor.execute('SELECT COUNT(DISTINCT device_id) as count FROM sensor_data')
         device_count = cursor.fetchone()['count']
         
-        cursor.execute('SELECT COUNT(DISTINCT shelf_id) as count FROM sensor_data')
+        # 活躍貨架：已啟用的貨架數量
+        cursor.execute('SELECT COUNT(*) as count FROM shelves WHERE enabled = 1')
         shelf_count = cursor.fetchone()['count']
         
         cursor.execute('SELECT MAX(timestamp) as last_update FROM sensor_data')

@@ -3,11 +3,15 @@
 """
 MQTT 通信模塊
 負責接收和發送 MQTT 數據和指令
+優化：Queue + 批次寫入 + 指數退避
 """
 
 import paho.mqtt.client as mqtt
 import json
 import datetime
+import queue
+import threading
+import time
 
 # 導入自定義模塊
 from config import (
@@ -18,7 +22,8 @@ from config import (
 from database import (
     init_database, init_default_data,
     register_device, save_sensor_data, get_shelf_info,
-    update_shelf_calibration, update_shelf_config
+    update_shelf_calibration, update_shelf_config,
+    batch_save_sensor_data  # 新增批次寫入函數
 )
 from analyzer import analyze_shelf_data, is_valid_distance, format_uptime
 
@@ -29,11 +34,70 @@ try:
 except ImportError:
     FIREBASE_ENABLED = False
 
+# ==================== 資料佇列配置 ====================
+sensor_data_queue = queue.Queue(maxsize=1000)  # 最多緩衝 1000 筆
+BATCH_SIZE = 10  # 每批次寫入 10 筆
+BATCH_TIMEOUT = 2.0  # 2 秒內未滿也寫入
+
+# ==================== 重連退避配置 ====================
+reconnect_delay = 5
+MAX_RECONNECT_DELAY = 300  # 最大 5 分鐘
+
+# ==================== 批次寫入 Worker ====================
+def db_writer_worker():
+    """資料庫寫入 Worker（批次處理）"""
+    buffer = []
+    last_write_time = time.time()
+    
+    print(f"{Colors.OKGREEN}[Worker]{Colors.ENDC} 資料庫寫入 Worker 已啟動")
+    
+    while True:
+        try:
+            # 嘗試從 Queue 取資料，超時時間為 1 秒
+            try:
+                data = sensor_data_queue.get(timeout=1.0)
+                if data is None:  # 結束信號
+                    break
+                buffer.append(data)
+            except queue.Empty:
+                pass
+            
+            # 判斷是否需要寫入
+            current_time = time.time()
+            time_elapsed = current_time - last_write_time
+            should_write = (len(buffer) >= BATCH_SIZE or 
+                          (len(buffer) > 0 and time_elapsed >= BATCH_TIMEOUT))
+            
+            if should_write:
+                # 批次寫入
+                if batch_save_sensor_data(buffer):
+                    print(f"{Colors.OKGREEN}[Worker]{Colors.ENDC} ✓ 批次寫入 {len(buffer)} 筆資料")
+                else:
+                    print(f"{Colors.FAIL}[Worker]{Colors.ENDC} ✗ 批次寫入失敗")
+                
+                buffer.clear()
+                last_write_time = current_time
+                
+        except Exception as e:
+            print(f"{Colors.FAIL}[Worker]{Colors.ENDC} 錯誤: {e}")
+            buffer.clear()
+    
+    print(f"{Colors.WARNING}[Worker]{Colors.ENDC} 資料庫寫入 Worker 已停止")
+
+# 啟動 Worker Thread
+db_worker_thread = threading.Thread(target=db_writer_worker, daemon=True)
+db_worker_thread.start()
+
 # ==================== MQTT 回調函式 ====================
 def on_connect(client, userdata, flags, rc):
     """當連接到 MQTT broker 時的回調"""
+    global reconnect_delay
+    
     if rc == 0:
         print(f"{Colors.OKGREEN}[MQTT]{Colors.ENDC} 已連接到 MQTT Broker")
+        
+        # 重置重連延遲
+        reconnect_delay = 5
         
         # 訂閱主題
         client.subscribe(TOPIC_SENSOR)
@@ -58,8 +122,15 @@ def on_connect(client, userdata, flags, rc):
 
 def on_disconnect(client, userdata, rc):
     """當 MQTT 斷線時的回調"""
+    global reconnect_delay
+    
     if rc != 0:
-        print(f"{Colors.WARNING}[警告]{Colors.ENDC} 非預期斷線，將自動重連...")
+        print(f"{Colors.WARNING}[警告]{Colors.ENDC} 非預期斷線，將在 {reconnect_delay} 秒後重連...")
+        time.sleep(reconnect_delay)
+        
+        # 指數退避：每次重連失敗，延遲時間加倍
+        reconnect_delay = min(reconnect_delay * 2, MAX_RECONNECT_DELAY)
+        print(f"{Colors.WARNING}[重連]{Colors.ENDC} 下次重連延遲: {reconnect_delay} 秒")
 
 def on_message(client, userdata, msg):
     """當收到訊息時的回調"""
@@ -116,10 +187,21 @@ def handle_sensor_message(payload: str, timestamp: str):
                 if occupied_length > 0:
                     stock_quantity = int(occupied_length / product_length)
         
-        # 儲存到數據庫
-        save_sensor_data(device_id, shelf_id, distance_cm, occupied, fill_percent, stock_quantity)
+        # 放入 Queue，由 Worker 批次寫入（非阻塞）
+        try:
+            sensor_data_queue.put_nowait({
+                'device_id': device_id,
+                'shelf_id': shelf_id,
+                'distance_cm': distance_cm,
+                'occupied': occupied,
+                'fill_percent': fill_percent,
+                'stock_quantity': stock_quantity,
+                'timestamp': timestamp
+            })
+        except queue.Full:
+            print(f"{Colors.WARNING}[Queue]{Colors.ENDC} 佇列已滿，丟棄資料")
         
-        # 顯示結果
+        # 顯示結果（不等待 DB 寫入）
         print_sensor_data(timestamp, device_id, shelf_id, distance_cm, 
                          occupied, fill_percent, shelf_info, stock_quantity)
         

@@ -7,7 +7,7 @@
 
 from typing import Tuple
 from config import OCCUPIED_THRESHOLD, SHELF_CONFIG
-from database import get_shelf_max_distance
+from database import get_shelf_info
 
 def analyze_shelf_data(shelf_id: str, distance_cm: float) -> Tuple[bool, float]:
     """
@@ -21,34 +21,56 @@ def analyze_shelf_data(shelf_id: str, distance_cm: float) -> Tuple[bool, float]:
         (occupied, fill_percent): 占用狀態和填充率
     
     判斷邏輯：
-        - 距離越小 = 物品越多
-        - 填充率 = (最大距離 - 實際距離) / 最大距離 × 100%
-        - 當占用空間 > OCCUPIED_THRESHOLD 時判定為有物品
+        1. 距離 >= 貨架最大長度 → 空的（距離太遠，沒東西）
+        2. 占用長度 < 商品單個長度 → 空的（放不下一個商品）
+        3. 占用長度 >= 商品單個長度 → 有物品
+        4. 填充率 = (最大距離 - 實際距離) / 最大距離 × 100%
     """
-    # 從資料庫獲取貨架配置
-    max_distance = get_shelf_max_distance(shelf_id)
+    # 從資料庫獲取貨架完整資訊
+    shelf_info = get_shelf_info(shelf_id)
     
-    if max_distance is None:
+    if not shelf_info:
         # 如果資料庫沒有配置，使用預設配置
         if shelf_id in SHELF_CONFIG:
             max_distance = SHELF_CONFIG[shelf_id]["max_distance"]
+            product_length = None
         else:
             return False, 0.0
-    
-    # 計算物品佔用的空間（公分）
-    occupied_space = max_distance - distance_cm
-    
-    # 判斷是否有物品
-    # 占用空間 > OCCUPIED_THRESHOLD 就算有物品
-    if occupied_space > OCCUPIED_THRESHOLD:
-        occupied = True
-        fill_percent = (occupied_space / max_distance) * 100.0
-        
-        # 限制在 0-100%
-        fill_percent = max(0.0, min(100.0, fill_percent))
     else:
-        occupied = False
-        fill_percent = 0.0
+        # 使用 shelf_length 作為最大距離（校正後的貨架長度）
+        max_distance = shelf_info.get('shelf_length') or shelf_info.get('max_distance')
+        product_length = shelf_info.get('product_length')
+    
+    if not max_distance or max_distance <= 0:
+        return False, 0.0
+    
+    # ===== 判斷邏輯 1: 距離 >= 最大長度 → 空的 =====
+    if distance_cm >= max_distance:
+        return False, 0.0
+    
+    # 計算被占用的長度（公分）
+    occupied_length = max_distance - distance_cm
+    
+    # ===== 判斷邏輯 2: 如果有配置商品，檢查是否滿足單個商品長度 =====
+    if product_length and product_length > 0:
+        # 占用長度 < 商品長度 → 空的（放不下一個商品）
+        if occupied_length < product_length:
+            return False, 0.0
+        else:
+            # 占用長度 >= 商品長度 → 有物品
+            occupied = True
+            fill_percent = (occupied_length / max_distance) * 100.0
+    else:
+        # ===== 判斷邏輯 3: 沒有配置商品，使用閾值判斷 =====
+        if occupied_length > OCCUPIED_THRESHOLD:
+            occupied = True
+            fill_percent = (occupied_length / max_distance) * 100.0
+        else:
+            occupied = False
+            fill_percent = 0.0
+    
+    # 限制填充率在 0-100%
+    fill_percent = max(0.0, min(100.0, fill_percent))
     
     return occupied, fill_percent
 
@@ -80,6 +102,11 @@ def calculate_stock_from_distance(distance_cm: float, product_length: float, max
         return 0
     
     occupied_space = max_distance - distance_cm
+    
+    # 占用空間小於一個商品長度 → 0
+    if occupied_space < product_length:
+        return 0
+    
     estimated_count = int(occupied_space / product_length)
     
     return max(0, estimated_count)
@@ -100,4 +127,3 @@ def format_uptime(uptime_ms: int) -> str:
     seconds = int(uptime_seconds % 60)
     
     return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
-

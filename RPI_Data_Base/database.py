@@ -389,6 +389,55 @@ def save_sensor_data(device_id: str, shelf_id: str, distance_cm: float,
         print(f"{Colors.FAIL}[錯誤]{Colors.ENDC} 數據庫儲存失敗: {e}")
         return False
 
+def batch_save_sensor_data(data_list: list) -> bool:
+    """批次儲存感測器數據（效能優化）"""
+    if not data_list:
+        return True
+    
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        # 啟用 WAL mode 以提升並發效能
+        conn.execute('PRAGMA journal_mode=WAL')
+        cursor = conn.cursor()
+        
+        # 準備批次插入資料
+        values = []
+        device_ids = set()
+        
+        for data in data_list:
+            # 使用原始 timestamp 或當前時間
+            timestamp = data.get('timestamp') or datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            
+            values.append((
+                data['device_id'],
+                data['shelf_id'],
+                data['distance_cm'],
+                int(data['occupied']),
+                data['fill_percent'],
+                data.get('stock_quantity', 0),
+                timestamp
+            ))
+            device_ids.add(data['device_id'])
+        
+        # 使用 executemany 批次插入
+        cursor.executemany('''
+            INSERT INTO sensor_data 
+            (device_id, shelf_id, distance_cm, occupied, fill_percent, stock_quantity, timestamp)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        ''', values)
+        
+        conn.commit()
+        conn.close()
+        
+        # 批次更新設備最後上線時間
+        for device_id in device_ids:
+            update_device_last_seen(device_id)
+        
+        return True
+    except Exception as e:
+        print(f"{Colors.FAIL}[錯誤]{Colors.ENDC} 批次數據庫儲存失敗: {e}")
+        return False
+
 def query_latest_data(shelf_id: str = None, device_id: str = None, limit: int = 10) -> List[Dict]:
     """查詢最新數據"""
     try:
