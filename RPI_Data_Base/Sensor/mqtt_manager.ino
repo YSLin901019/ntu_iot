@@ -1,14 +1,19 @@
 // ==================== mqtt_manager.ino ====================
 // MQTT 管理器（簡化版）：連線、發布原始感測器數據
 // 說明：只發送原始數據，不做任何判斷
-// mqtt_server: 192.168.0.109
+// 支援 mDNS：可使用主機名稱或 IP 位址連接
 // =========================================================
 
 // ---------- MQTT 伺服器設定 ----------
-const char* mqtt_server = "192.168.0.109";  // 請改成你的 RPI IP 位址
-const int mqtt_port = 1883;                 // MQTT 預設埠號
-const char* mqtt_user = "";                 // MQTT 使用者名稱（如果有設定）
-const char* mqtt_password = "";             // MQTT 密碼（如果有設定）
+const char* mqtt_hostname = "yslin.local";  // mDNS 主機名稱（優先使用，必須加 .local）
+const char* mqtt_server_ip = "192.168.0.109";    // 備援 IP 位址（當 mDNS 失敗時使用）
+const int mqtt_port = 1883;                       // MQTT 預設埠號
+const char* mqtt_user = "";                       // MQTT 使用者名稱（如果有設定）
+const char* mqtt_password = "";                   // MQTT 密碼（如果有設定）
+
+// ---------- MQTT 連線狀態 ----------
+IPAddress mqtt_server_resolved_ip;  // 解析後的 IP 位址
+bool mqtt_ip_resolved = false;      // IP 是否已解析
 
 // ---------- MQTT 主題設定 ----------
 const char* mqtt_topic_sensor = "shelf/sensor";      // 感測器數據主題
@@ -37,6 +42,7 @@ const unsigned long STATUS_PUBLISH_INTERVAL = 30000;  // 30秒發送一次狀態
 // ---------- 函式前向宣告 ----------
 void mqttCallback(char* topic, byte* payload, unsigned int length);
 void reconnectMQTT();
+bool resolveMQTTServer();
 
 // Shelf_manager.ino 中的函數
 int getShelfIndexById(const char* shelfId);
@@ -52,21 +58,73 @@ void getDeviceId() {
   device_id = "ESP32S3_" + serial_number;
 }
 
+// ---------- 解析 MQTT 伺服器位址 ----------
+bool resolveMQTTServer() {
+  Serial.println("[MQTT] 開始解析 MQTT 伺服器位址...");
+  
+  // 方法 1: 嘗試使用 mDNS 解析主機名稱
+  Serial.print("[MQTT] 正在透過 mDNS 解析: ");
+  Serial.println(mqtt_hostname);
+  
+  if (WiFi.hostByName(mqtt_hostname, mqtt_server_resolved_ip)) {
+    // 檢查解析結果是否為有效 IP（不是 0.0.0.0）
+    if (mqtt_server_resolved_ip[0] != 0 || mqtt_server_resolved_ip[1] != 0 || 
+        mqtt_server_resolved_ip[2] != 0 || mqtt_server_resolved_ip[3] != 0) {
+      Serial.print("[MQTT] ✓ mDNS 解析成功: ");
+      Serial.println(mqtt_server_resolved_ip);
+      mqtt_ip_resolved = true;
+      return true;
+    } else {
+      Serial.println("[MQTT] ✗ mDNS 解析結果無效 (0.0.0.0)");
+    }
+  } else {
+    Serial.println("[MQTT] ✗ mDNS 解析失敗");
+  }
+  
+  // 方法 2: 使用備援 IP 位址
+  Serial.print("[MQTT] 使用備援 IP 位址: ");
+  Serial.println(mqtt_server_ip);
+  
+  if (mqtt_server_resolved_ip.fromString(mqtt_server_ip)) {
+    Serial.println("[MQTT] ✓ 備援 IP 解析成功");
+    mqtt_ip_resolved = true;
+    return true;
+  }
+  
+  Serial.println("[MQTT] ✗ 備援 IP 解析失敗");
+  mqtt_ip_resolved = false;
+  return false;
+}
+
 // ---------- 初始化 MQTT ----------
 void setupMQTT() {
   // 設置 MQTT 緩衝區大小（預設 256，增加到 1024 以支援較大的 JSON）
   mqttClient.setBufferSize(1024);
   
-  mqttClient.setServer(mqtt_server, mqtt_port);
+  // 先解析 MQTT 伺服器位址
+  if (!resolveMQTTServer()) {
+    Serial.println("[MQTT] 警告: MQTT 伺服器位址解析失敗，將在連線時重試");
+  }
+  
+  // 設置 MQTT 伺服器（使用解析後的 IP）
+  if (mqtt_ip_resolved) {
+    mqttClient.setServer(mqtt_server_resolved_ip, mqtt_port);
+    Serial.print("[MQTT] 伺服器設定為: ");
+    Serial.print(mqtt_server_resolved_ip);
+  } else {
+    // 如果解析失敗，先用備援 IP
+    mqttClient.setServer(mqtt_server_ip, mqtt_port);
+    Serial.print("[MQTT] 伺服器設定為備援 IP: ");
+    Serial.print(mqtt_server_ip);
+  }
+  Serial.print(":");
+  Serial.println(mqtt_port);
+  
   mqttClient.setCallback(mqttCallback);
   
   Serial.println("[MQTT] MQTT 設定完成");
   Serial.print("[MQTT] 緩衝區大小: ");
   Serial.println(mqttClient.getBufferSize());
-  Serial.print("[MQTT] 伺服器: ");
-  Serial.print(mqtt_server);
-  Serial.print(":");
-  Serial.println(mqtt_port);
   
   // 嘗試首次連線
   if (WiFi.status() == WL_CONNECTED) {
@@ -109,7 +167,26 @@ void reconnectMQTT() {
     return;
   }
   
-  Serial.print("[MQTT] 正在連接 MQTT 伺服器...");
+  // 如果 IP 尚未解析或解析失敗，重新嘗試
+  if (!mqtt_ip_resolved) {
+    Serial.println("[MQTT] 重新解析 MQTT 伺服器位址...");
+    if (resolveMQTTServer()) {
+      mqttClient.setServer(mqtt_server_resolved_ip, mqtt_port);
+    } else {
+      Serial.println("[MQTT] 解析失敗，使用備援 IP");
+      mqttClient.setServer(mqtt_server_ip, mqtt_port);
+    }
+  }
+  
+  Serial.print("[MQTT] 正在連接 MQTT 伺服器 (");
+  if (mqtt_ip_resolved) {
+    Serial.print(mqtt_hostname);
+    Serial.print(" -> ");
+    Serial.print(mqtt_server_resolved_ip);
+  } else {
+    Serial.print(mqtt_server_ip);
+  }
+  Serial.print(")...");
   
   // 產生唯一的客戶端 ID
   String clientId = "ESP32_Shelf_";
@@ -155,6 +232,9 @@ void reconnectMQTT() {
   } else {
     Serial.print(" 失敗，錯誤碼: ");
     Serial.println(mqttClient.state());
+    
+    // 如果連線失敗，下次重試時重新解析 IP（可能 IP 已改變）
+    mqtt_ip_resolved = false;
     
     // 錯誤碼說明
     switch (mqttClient.state()) {

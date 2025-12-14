@@ -114,10 +114,29 @@ def register_device(device_id: str, device_name: str = None, location: str = Non
         conn = sqlite3.connect(DB_FILE)
         cursor = conn.cursor()
         
-        cursor.execute('''
-            INSERT OR REPLACE INTO devices (device_id, device_name, location, status, last_seen)
-            VALUES (?, ?, ?, 'online', CURRENT_TIMESTAMP)
-        ''', (device_id, device_name or device_id, location))
+        # 檢查設備是否已存在
+        cursor.execute('SELECT location, device_name FROM devices WHERE device_id = ?', (device_id,))
+        existing = cursor.fetchone()
+        
+        if existing:
+            # 設備已存在，只更新提供的欄位（保留未提供的欄位）
+            existing_location, existing_name = existing
+            
+            # 如果沒有提供新值，保留原有值
+            final_location = location if location is not None else existing_location
+            final_name = device_name if device_name is not None else existing_name
+            
+            cursor.execute('''
+                UPDATE devices 
+                SET device_name = ?, location = ?, status = 'online', last_seen = CURRENT_TIMESTAMP
+                WHERE device_id = ?
+            ''', (final_name, final_location, device_id))
+        else:
+            # 新設備，直接插入
+            cursor.execute('''
+                INSERT INTO devices (device_id, device_name, location, status, last_seen)
+                VALUES (?, ?, ?, 'online', CURRENT_TIMESTAMP)
+            ''', (device_id, device_name or device_id, location))
         
         conn.commit()
         conn.close()

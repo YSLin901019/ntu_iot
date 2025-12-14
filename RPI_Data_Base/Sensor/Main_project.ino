@@ -7,7 +7,11 @@
 
 #include <WiFi.h>
 #include <PubSubClient.h>
+#include <Preferences.h>
 #include "Ultrasonic.h"
+
+// ---------- Preferences 物件（用於持久化配置）----------
+Preferences preferences;
 
 // ---------- 全域計時器 ----------
 unsigned long lastSensorRead = 0;
@@ -35,6 +39,7 @@ void setup() {
   
   // 3. 初始化貨架感測器
   Serial.println("\n>>> 步驟 3: 初始化貨架感測器");
+  loadShelfConfig();  // 從 flash 載入配置
   setupShelf();
   
   Serial.println("\n========================================");
