@@ -133,10 +133,10 @@ def register_device(device_id: str, device_name: str = None, location: str = Non
             ''', (final_name, final_location, device_id))
         else:
             # 新設備，直接插入
-            cursor.execute('''
+        cursor.execute('''
                 INSERT INTO devices (device_id, device_name, location, status, last_seen)
-                VALUES (?, ?, ?, 'online', CURRENT_TIMESTAMP)
-            ''', (device_id, device_name or device_id, location))
+            VALUES (?, ?, ?, 'online', CURRENT_TIMESTAMP)
+        ''', (device_id, device_name or device_id, location))
         
         conn.commit()
         conn.close()
@@ -245,6 +245,90 @@ def get_shelf_info(shelf_id: str) -> Optional[Dict]:
     except Exception as e:
         print(f"{Colors.FAIL}[錯誤]{Colors.ENDC} 獲取貨架資訊失敗: {e}")
         return None
+
+def update_shelf_calibration(shelf_id: str, shelf_length: float) -> bool:
+    """更新貨架校正長度（同時更新 max_distance）"""
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        cursor = conn.cursor()
+        
+        # 校正後的長度就是貨架的最大距離
+        # 同時更新 shelf_length 和 max_distance
+        cursor.execute('''
+            UPDATE shelves 
+            SET shelf_length = ?, 
+                max_distance = ?,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE shelf_id = ?
+        ''', (shelf_length, shelf_length, shelf_id))
+        
+        conn.commit()
+        conn.close()
+        
+        print(f"{Colors.OKGREEN}[資料庫]{Colors.ENDC} 已更新貨架 {shelf_id}: 長度={shelf_length:.2f}cm, max_distance={shelf_length:.2f}cm")
+        return True
+    except Exception as e:
+        print(f"{Colors.FAIL}[錯誤]{Colors.ENDC} 更新貨架長度失敗: {e}")
+        return False
+
+def update_shelf_config(device_id: str, shelf_id: str, enabled: bool = None, 
+                        sensor_connected: bool = None, shelf_length: float = None, 
+                        gpio: int = None) -> bool:
+    """更新貨架配置資訊"""
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        cursor = conn.cursor()
+        
+        # 檢查貨架是否存在
+        cursor.execute('SELECT shelf_id FROM shelves WHERE shelf_id = ?', (shelf_id,))
+        exists = cursor.fetchone()
+        
+        if exists:
+            # 更新現有貨架
+            updates = []
+            params = []
+            
+            if enabled is not None:
+                updates.append('enabled = ?')
+                params.append(1 if enabled else 0)
+            
+            if sensor_connected is not None:
+                updates.append('sensor_connected = ?')
+                params.append(1 if sensor_connected else 0)
+            
+            if shelf_length is not None:
+                updates.append('shelf_length = ?')
+                params.append(shelf_length)
+            
+            if gpio is not None:
+                updates.append('gpio = ?')
+                params.append(gpio)
+            
+            if updates:
+                updates.append('updated_at = CURRENT_TIMESTAMP')
+                params.append(shelf_id)
+                
+                sql = f"UPDATE shelves SET {', '.join(updates)} WHERE shelf_id = ?"
+                cursor.execute(sql, params)
+        else:
+            # 新增貨架（從 ESP32 配置）
+            cursor.execute('''
+                INSERT INTO shelves 
+                (shelf_id, device_id, enabled, sensor_connected, shelf_length, gpio, max_distance)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            ''', (shelf_id, device_id, 
+                  1 if enabled else 0, 
+                  1 if sensor_connected else 0, 
+                  shelf_length or 0.0, 
+                  gpio or 0, 
+                  100.0))  # 預設 max_distance
+        
+        conn.commit()
+        conn.close()
+        return True
+    except Exception as e:
+        print(f"{Colors.FAIL}[錯誤]{Colors.ENDC} 更新貨架配置失敗: {e}")
+        return False
 
 def list_all_shelves(device_id: str = None) -> List[Dict]:
     """列出所有貨架"""

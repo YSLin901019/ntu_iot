@@ -889,6 +889,58 @@ def api_enable_shelf(shelf_id):
             'error': str(e)
         }), 500
 
+@app.route('/api/shelves/<shelf_id>/calibrate', methods=['POST'])
+def api_calibrate_shelf(shelf_id):
+    """API - 校正貨架（測量空貨架長度）"""
+    if not SHELF_CONFIG_ENABLED:
+        return jsonify({
+            'success': False,
+            'error': '貨架配置模塊未啟用'
+        }), 500
+    
+    try:
+        # 1. 獲取請求數據
+        data = request.get_json() or {}
+        device_id = data.get('device_id')
+        
+        if not device_id:
+            # 從數據庫獲取設備 ID
+            conn = get_db()
+            cursor = conn.cursor()
+            cursor.execute('SELECT device_id FROM shelves WHERE shelf_id = ?', (shelf_id,))
+            result = cursor.fetchone()
+            conn.close()
+            
+            if not result:
+                return jsonify({
+                    'success': False,
+                    'error': f'找不到貨架 {shelf_id}'
+                }), 404
+            
+            device_id = result['device_id']
+        
+        # 2. 發送校正命令到 ESP32
+        from shelf_config_manager import calibrate_shelf
+        result = calibrate_shelf(device_id, shelf_id, timeout=15)
+        
+        if result['success']:
+            return jsonify({
+                'success': True,
+                'message': f'貨架 {shelf_id} 校正成功',
+                'shelf_length': result['shelf_length']
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': result.get('error', '校正失敗')
+            }), 400
+            
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
 @app.route('/api/shelves/<shelf_id>/disable', methods=['POST'])
 def api_disable_shelf(shelf_id):
     """API - 停用貨架"""

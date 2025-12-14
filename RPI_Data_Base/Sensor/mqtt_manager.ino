@@ -25,6 +25,7 @@ const char* mqtt_topic_heartbeat = "shelf/heartbeat";  // 心跳檢測主題（�
 const char* mqtt_topic_heartbeat_response = "shelf/heartbeat/response";  // 心跳檢測回應主題
 const char* mqtt_topic_shelf_config_request = "shelf/config/request";  // 貨架配置查詢主題（訂閱）
 const char* mqtt_topic_shelf_config_response = "shelf/config/response";  // 貨架配置回應主題
+const char* mqtt_topic_calibrate_response = "shelf/calibrate/response";  // 校正結果回應主題
 String serial_number = "";
 String device_id = "";
 
@@ -98,8 +99,8 @@ bool resolveMQTTServer() {
 
 // ---------- 初始化 MQTT ----------
 void setupMQTT() {
-  // 設置 MQTT 緩衝區大小（預設 256，增加到 1024 以支援較大的 JSON）
-  mqttClient.setBufferSize(1024);
+  // 設置 MQTT 緩衝區大小（增加到 2048 以支援較大的 JSON）
+  mqttClient.setBufferSize(2048);
   
   // 先解析 MQTT 伺服器位址
   if (!resolveMQTTServer()) {
@@ -286,6 +287,7 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
 // ---------- 處理 MQTT 命令 ----------
 void handleMQTTCommand(String command) {
   command.trim();
+  String originalCommand = command;
   command.toLowerCase();
   
   if (command == "status") {
@@ -297,7 +299,7 @@ void handleMQTTCommand(String command) {
     publishAllSensorData();
   } else if (command.startsWith("enable ")) {
     // 啟用特定貨架（例如："enable A1"）
-    String shelfId = command.substring(7);
+    String shelfId = originalCommand.substring(7);
     shelfId.trim();
     shelfId.toUpperCase();
     
@@ -314,7 +316,7 @@ void handleMQTTCommand(String command) {
     }
   } else if (command.startsWith("disable ")) {
     // 停用特定貨架（例如："disable A1"）
-    String shelfId = command.substring(8);
+    String shelfId = originalCommand.substring(8);
     shelfId.trim();
     shelfId.toUpperCase();
     
@@ -328,6 +330,28 @@ void handleMQTTCommand(String command) {
     } else {
       Serial.print("[MQTT] 找不到貨架: ");
       Serial.println(shelfId);
+    }
+  } else if (command.startsWith("calibrate ")) {
+    // 校正特定貨架（例如："calibrate A1"）
+    String shelfId = originalCommand.substring(10);
+    shelfId.trim();
+    shelfId.toUpperCase();
+    
+    int idx = getShelfIndexById(shelfId.c_str());
+    if (idx >= 0) {
+      Serial.print("[MQTT] 收到校正請求: ");
+      Serial.println(shelfId);
+      
+      // 執行校正
+      float length = calibrateShelf(idx);
+      
+      // 發送校正結果
+      publishCalibrateResult(shelfId.c_str(), length, (length > 0));
+      
+    } else {
+      Serial.print("[MQTT] 找不到貨架: ");
+      Serial.println(shelfId);
+      publishCalibrateResult(shelfId.c_str(), -1.0, false);
     }
   } else {
     Serial.print("[MQTT] 未知命令: ");
@@ -424,6 +448,28 @@ void publishAllSensorData() {
 // ---------- 檢查 MQTT 連線狀態 ----------
 bool isMQTTConnected() {
   return mqttClient.connected();
+}
+
+// ---------- 發送校正結果 ----------
+void publishCalibrateResult(const char* shelfId, float length, bool success) {
+  if (!mqttClient.connected()) {
+    Serial.println("[MQTT] MQTT 未連線，無法發送校正結果");
+    return;
+  }
+  
+  // 建立校正結果 JSON
+  String response = "{";
+  response += "\"device_id\":\"" + device_id + "\",";
+  response += "\"shelf_id\":\"" + String(shelfId) + "\",";
+  response += "\"success\":" + String(success ? "true" : "false") + ",";
+  response += "\"shelf_length\":" + String(length, 2);
+  response += "}";
+  
+  // 發送到校正結果主題
+  mqttClient.publish(mqtt_topic_calibrate_response, response.c_str());
+  
+  Serial.print("[MQTT] 已發送校正結果: ");
+  Serial.println(response);
 }
 
 // ---------- 處理設備探測請求 ----------
@@ -524,7 +570,8 @@ void handleShelfConfigRequest(String message) {
     response += "\"shelf_id\":\"" + String(shelfConfig[i].id) + "\",";
     response += "\"index\":" + String(i) + ",";
     response += "\"gpio\":" + String(shelfConfig[i].pin) + ",";
-    response += "\"enabled\":" + String(shelfConfig[i].enabled ? "true" : "false");
+    response += "\"enabled\":" + String(shelfConfig[i].enabled ? "true" : "false") + ",";
+    response += "\"shelf_length\":" + String(shelfConfig[i].shelf_length, 2);
     response += "}";
   }
   response += "],";

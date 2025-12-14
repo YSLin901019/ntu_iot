@@ -12,7 +12,7 @@ void loadShelfConfig() {
   
   int loadedCount = 0;
   
-  // 為每個貨架載入啟用狀態
+  // 為每個貨架載入啟用狀態和貨架長度
   for (int i = 0; i < SHELF_COUNT; i++) {
     // 使用貨架 ID 作為 key（例如："A1", "B2"）
     String key = String(shelfConfig[i].id);
@@ -20,14 +20,25 @@ void loadShelfConfig() {
     // 讀取儲存的狀態（預設為 false）
     bool savedEnabled = preferences.getBool(key.c_str(), false);
     
+    // 讀取儲存的貨架長度（預設為 0.0）
+    String lengthKey = key + "_len";
+    float savedLength = preferences.getFloat(lengthKey.c_str(), 0.0);
+    
     // 套用載入的配置
     shelfConfig[i].enabled = savedEnabled;
+    shelfConfig[i].shelf_length = savedLength;
     
     if (savedEnabled) {
       loadedCount++;
       Serial.print("[Config] ✓ ");
       Serial.print(shelfConfig[i].id);
-      Serial.println(" 已啟用");
+      Serial.print(" 已啟用");
+      if (savedLength > 0) {
+        Serial.print(", 長度: ");
+        Serial.print(savedLength, 1);
+        Serial.print("cm");
+      }
+      Serial.println();
     }
   }
   
@@ -50,12 +61,22 @@ void saveShelfConfig(int shelfIndex) {
   String key = String(shelfConfig[shelfIndex].id);
   preferences.putBool(key.c_str(), shelfConfig[shelfIndex].enabled);
   
+  // 同時保存貨架長度
+  String lengthKey = key + "_len";
+  preferences.putFloat(lengthKey.c_str(), shelfConfig[shelfIndex].shelf_length);
+  
   preferences.end();
   
   Serial.print("[Config] 已保存配置: ");
   Serial.print(shelfConfig[shelfIndex].id);
   Serial.print(" = ");
-  Serial.println(shelfConfig[shelfIndex].enabled ? "啟用" : "停用");
+  Serial.print(shelfConfig[shelfIndex].enabled ? "啟用" : "停用");
+  if (shelfConfig[shelfIndex].shelf_length > 0) {
+    Serial.print(", 長度: ");
+    Serial.print(shelfConfig[shelfIndex].shelf_length, 1);
+    Serial.print("cm");
+  }
+  Serial.println();
 }
 
 // ---------- 清除所有保存的配置 ----------
@@ -65,6 +86,76 @@ void clearAllShelfConfig() {
   preferences.end();
   
   Serial.println("[Config] 已清除所有保存的貨架配置");
+}
+
+// ---------- 貨架校正功能（測量空貨架長度）----------
+float calibrateShelf(int shelfIndex) {
+  if (shelfIndex < 0 || shelfIndex >= SHELF_COUNT) {
+    Serial.println("[Calibrate] ✗ 無效的貨架索引");
+    return -1.0;
+  }
+  
+  Serial.print("[Calibrate] 開始校正貨架 ");
+  Serial.print(shelfConfig[shelfIndex].id);
+  Serial.println(" ...");
+  Serial.println("[Calibrate] 請確保貨架上沒有任何物品！");
+  Serial.println("[Calibrate] 正在進行 10 次測量...");
+  
+  const int CALIBRATE_SAMPLES = 10;
+  float validReadings[CALIBRATE_SAMPLES];
+  int validCount = 0;
+  
+  for (int i = 0; i < CALIBRATE_SAMPLES; i++) {
+    long distMm = sensors[shelfIndex]->MeasureInMillimeters();
+    float distCm = distMm / 10.0;
+    
+    Serial.print("[Calibrate] 測量 #");
+    Serial.print(i + 1);
+    Serial.print(": ");
+    Serial.print(distCm, 1);
+    Serial.print(" cm");
+    
+    // 檢查是否為有效讀值（20mm - 4000mm，即 2-400cm）
+    if (distMm >= 20 && distMm <= 4000) {
+      validReadings[validCount] = distCm;
+      validCount++;
+      Serial.println(" ✓");
+    } else {
+      Serial.println(" ✗ 無效");
+    }
+    
+    delay(100);  // 等待下次測量
+  }
+  
+  // 檢查是否有足夠的有效讀值
+  if (validCount < 5) {
+    Serial.print("[Calibrate] ✗ 校正失敗：有效測量次數不足 (");
+    Serial.print(validCount);
+    Serial.println("/10)");
+    return -1.0;
+  }
+  
+  // 計算平均值
+  float sum = 0;
+  for (int i = 0; i < validCount; i++) {
+    sum += validReadings[i];
+  }
+  float average = sum / validCount;
+  
+  // 保存到配置並持久化
+  shelfConfig[shelfIndex].shelf_length = average;
+  saveShelfConfig(shelfIndex);
+  
+  Serial.println();
+  Serial.print("[Calibrate] ✓ 校正完成！貨架 ");
+  Serial.print(shelfConfig[shelfIndex].id);
+  Serial.print(" 長度: ");
+  Serial.print(average, 1);
+  Serial.print(" cm (");
+  Serial.print(validCount);
+  Serial.println(" 次有效測量)");
+  
+  return average;
 }
 
 // ---------- 初始化所有貨架感測器 ----------

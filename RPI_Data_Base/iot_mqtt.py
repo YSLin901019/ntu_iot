@@ -17,7 +17,8 @@ from config import (
 )
 from database import (
     init_database, init_default_data,
-    register_device, save_sensor_data, get_shelf_info
+    register_device, save_sensor_data, get_shelf_info,
+    update_shelf_calibration, update_shelf_config
 )
 from analyzer import analyze_shelf_data, is_valid_distance, format_uptime
 
@@ -41,6 +42,14 @@ def on_connect(client, userdata, flags, rc):
         client.subscribe(TOPIC_STATUS)
         print(f"{Colors.OKCYAN}[訂閱]{Colors.ENDC} {TOPIC_STATUS}")
         
+        # 訂閱貨架校正回應主題
+        client.subscribe("shelf/calibrate/response")
+        print(f"{Colors.OKCYAN}[訂閱]{Colors.ENDC} shelf/calibrate/response")
+        
+        # 訂閱貨架配置回應主題
+        client.subscribe("shelf/config/response")
+        print(f"{Colors.OKCYAN}[訂閱]{Colors.ENDC} shelf/config/response")
+        
         print(f"\n{Colors.BOLD}{'='*60}{Colors.ENDC}")
         print(f"{Colors.BOLD}RPI 數據處理中心已啟動{Colors.ENDC}")
         print(f"{Colors.BOLD}{'='*60}{Colors.ENDC}\n")
@@ -62,6 +71,10 @@ def on_message(client, userdata, msg):
         handle_sensor_message(payload, timestamp)
     elif topic == TOPIC_STATUS:
         handle_status_message(payload, timestamp)
+    elif topic == "shelf/calibrate/response":
+        handle_calibrate_response(payload, timestamp)
+    elif topic == "shelf/config/response":
+        handle_config_response(payload, timestamp)
 
 # ==================== 感測器數據處理 ====================
 def handle_sensor_message(payload: str, timestamp: str):
@@ -164,6 +177,79 @@ def handle_status_message(payload: str, timestamp: str):
         
     except json.JSONDecodeError:
         print(f"  訊息: {payload}")
+
+# ==================== 校正結果處理 ====================
+def handle_calibrate_response(payload: str, timestamp: str):
+    """處理貨架校正結果"""
+    print(f"\n{Colors.HEADER}[{timestamp}]{Colors.ENDC}")
+    print(f"{Colors.OKBLUE}[貨架校正]{Colors.ENDC}")
+    
+    try:
+        data = json.loads(payload)
+        device_id = data.get('device_id', 'unknown')
+        shelf_id = data.get('shelf_id', 'N/A')
+        success = data.get('success', False)
+        shelf_length = data.get('shelf_length', 0.0)
+        
+        print(f"  設備ID: {device_id}")
+        print(f"  貨架ID: {Colors.BOLD}{shelf_id}{Colors.ENDC}")
+        
+        if success:
+            print(f"  校正結果: {Colors.OKGREEN}成功{Colors.ENDC}")
+            print(f"  貨架長度: {Colors.OKGREEN}{shelf_length:.2f} cm{Colors.ENDC}")
+            
+            # 更新資料庫
+            update_shelf_calibration(shelf_id, shelf_length)
+            print(f"  ✓ 已更新到數據庫")
+        else:
+            print(f"  校正結果: {Colors.FAIL}失敗{Colors.ENDC}")
+            print(f"  原因: 感測器未連接或讀值異常")
+        
+    except json.JSONDecodeError as e:
+        print(f"{Colors.FAIL}[錯誤]{Colors.ENDC} JSON 解析失敗: {e}")
+        print(f"  原始數據: {payload}")
+    except Exception as e:
+        print(f"{Colors.FAIL}[錯誤]{Colors.ENDC} 處理校正結果失敗: {e}")
+
+# ==================== 貨架配置響應處理 ====================
+def handle_config_response(payload: str, timestamp: str):
+    """處理貨架配置響應"""
+    print(f"\n{Colors.HEADER}[{timestamp}]{Colors.ENDC}")
+    print(f"{Colors.OKBLUE}[貨架配置更新]{Colors.ENDC}")
+    
+    try:
+        data = json.loads(payload)
+        device_id = data.get('device_id', 'unknown')
+        shelves = data.get('shelves', [])
+        
+        print(f"  設備ID: {device_id}")
+        print(f"  貨架數量: {len(shelves)}")
+        
+        # 更新每個貨架的配置到資料庫
+        for shelf in shelves:
+            shelf_id = shelf.get('shelf_id')
+            enabled = shelf.get('enabled', False)
+            sensor_connected = shelf.get('sensor_connected', False)
+            shelf_length = shelf.get('shelf_length', 0.0)
+            gpio = shelf.get('gpio', 0)
+            
+            # 更新資料庫
+            update_shelf_config(
+                device_id=device_id,
+                shelf_id=shelf_id,
+                enabled=enabled,
+                sensor_connected=sensor_connected,
+                shelf_length=shelf_length,
+                gpio=gpio
+            )
+        
+        print(f"  ✓ 已更新 {len(shelves)} 個貨架配置到數據庫")
+        
+    except json.JSONDecodeError as e:
+        print(f"{Colors.FAIL}[錯誤]{Colors.ENDC} JSON 解析失敗: {e}")
+        print(f"  原始數據: {payload}")
+    except Exception as e:
+        print(f"{Colors.FAIL}[錯誤]{Colors.ENDC} 處理配置響應失敗: {e}")
 
 # ==================== MQTT 命令發送 ====================
 def send_command(client: mqtt.Client, command: str) -> bool:

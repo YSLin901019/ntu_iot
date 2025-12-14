@@ -11,6 +11,7 @@
     <h4>📋 使用說明</h4>
     <ul style="margin: 10px 0; padding-left: 20px;">
         <li>點擊「查看貨架」查詢 ESP32S3 設備當前的貨架配置</li>
+        <li>點擊「📏 校正」測量空貨架長度（即貨架的最大距離）</li>
         <li>啟用的貨架會在每輪掃描中回傳距離數據</li>
         <li><strong>只有已啟用的貨架才能配置商品</strong></li>
         <li>停用的貨架不會進行掃描，也無法配置商品</li>
@@ -129,18 +130,32 @@ async function loadShelfConfig(deviceId) {
                     const statusIcon = shelf.enabled ? '✅' : '❌';
                     const statusText = shelf.enabled ? '已啟用' : '已停用';
                     
+                    // 貨架長度
+                    const shelfLength = shelf.shelf_length > 0 ? `${shelf.shelf_length.toFixed(1)} cm` : '未校正';
+                    const lengthColor = shelf.shelf_length > 0 ? '#28a745' : '#ffc107';
+                    
                     html += `
                         <div class="shelf-card ${enabledClass}" id="shelf-card-${shelf.shelf_id}">
                             <div style="display: flex; justify-content: space-between; align-items: flex-start;">
                                 <div style="flex: 1;">
                                     <h4 style="margin: 0 0 10px 0;">${statusIcon} 貨架 ${shelf.shelf_id}</h4>
-                                    <p style="margin: 5px 0; color: #666;">
+                                    <p style="margin: 5px 0; color: #666; font-size: 0.9em;">
                                         <strong>GPIO:</strong> ${shelf.gpio}<br>
                                         <strong>位置:</strong> ${shelf.index}<br>
-                                        <strong>狀態:</strong> ${statusText}
+                                        <strong>狀態:</strong> ${statusText}<br>
+                                        <strong>貨架長度:</strong> <span style="color: ${lengthColor}; font-weight: bold;">${shelfLength}</span>
                                     </p>
                                 </div>
                                 <div style="display: flex; flex-direction: column; gap: 8px;">
+                    `;
+                    
+                    // 校正按鈕（總是顯示）
+                    html += `
+                        <button onclick="calibrateShelf('${deviceId}', '${shelf.shelf_id}')" 
+                                class="btn btn-warning" 
+                                style="padding: 8px 16px;">
+                            📏 校正
+                        </button>
                     `;
                     
                     // 啟用/停用按鈕
@@ -271,6 +286,46 @@ async function disableShelf(shelfId) {
         }
     } catch (error) {
         alert(`❌ 發生錯誤: ${error.message}`);
+    }
+}
+
+// 校正貨架
+async function calibrateShelf(deviceId, shelfId) {
+    if (!confirm(`📏 開始校正貨架 ${shelfId}\n\n⚠️ 請確保：\n1. 貨架上沒有任何物品\n2. 感測器正常工作\n3. 等待約 3-5 秒完成校正\n\n📊 校正說明：\n• 測量空貨架的長度\n• 此長度將作為貨架的最大距離 (max_distance)\n• 用於計算商品數量和填充率\n\n確定要開始嗎？`)) {
+        return;
+    }
+    
+    const overlay = document.getElementById('loading-overlay');
+    overlay.querySelector('p').textContent = `正在校正貨架 ${shelfId}，請稍候...`;
+    overlay.style.display = 'flex';
+    
+    try {
+        const response = await fetch(`/api/shelves/${shelfId}/calibrate`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                device_id: deviceId,
+                shelf_id: shelfId
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            alert(`✅ 校正成功！\n\n貨架 ${shelfId} 長度: ${data.shelf_length.toFixed(2)} cm`);
+            
+            // 重新載入設備配置以更新顯示
+            await loadShelfConfig(deviceId);
+        } else {
+            alert(`❌ 校正失敗\n\n原因: ${data.error || '未知錯誤'}\n\n請檢查：\n- 感測器是否連接正常\n- 貨架上是否清空\n- ESP32 是否在線`);
+        }
+    } catch (error) {
+        alert(`❌ 發生錯誤: ${error.message}`);
+    } finally {
+        overlay.querySelector('p').textContent = '正在查詢設備貨架配置...';
+        overlay.style.display = 'none';
     }
 }
 </script>
