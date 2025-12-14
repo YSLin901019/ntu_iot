@@ -589,6 +589,98 @@ def sensor_data():
     """感測器數據頁面"""
     return render_template('sensor_data.html')
 
+# ==================== 路由 - 補貨提醒 ====================
+@app.route('/restock_alert')
+def restock_alert():
+    """補貨提醒頁面"""
+    return render_template('restock_alert.html')
+
+@app.route('/api/restock_alert')
+def api_restock_alert():
+    """API - 獲取需要補貨的貨架"""
+    try:
+        location = request.args.get('location', '')
+        product_name = request.args.get('product_name', '')
+        
+        conn = get_db()
+        cursor = conn.cursor()
+        
+        # 查詢：貨架已配置商品 + 最新數據為空的狀態
+        query = '''
+            SELECT 
+                s.shelf_id,
+                s.device_id,
+                s.product_name,
+                s.product_length,
+                s.shelf_length,
+                d.device_name,
+                d.location,
+                sd.timestamp as last_update,
+                sd.distance_cm,
+                sd.occupied
+            FROM shelves s
+            INNER JOIN devices d ON s.device_id = d.device_id
+            LEFT JOIN (
+                SELECT shelf_id, timestamp, distance_cm, occupied,
+                       ROW_NUMBER() OVER (PARTITION BY shelf_id ORDER BY timestamp DESC) as rn
+                FROM sensor_data
+            ) sd ON s.shelf_id = sd.shelf_id AND sd.rn = 1
+            WHERE s.product_name IS NOT NULL 
+              AND s.product_name != ""
+              AND s.enabled = 1
+              AND (sd.occupied = 0 OR sd.occupied IS NULL)
+        '''
+        
+        params = []
+        
+        if location:
+            query += ' AND d.location = ?'
+            params.append(location)
+        
+        if product_name:
+            query += ' AND s.product_name = ?'
+            params.append(product_name)
+        
+        query += ' ORDER BY sd.timestamp DESC'
+        
+        cursor.execute(query, params)
+        alerts = [dict(row) for row in cursor.fetchall()]
+        
+        # 獲取統計資訊
+        total_alerts = len(alerts)
+        
+        # 獲取篩選選項
+        cursor.execute('SELECT DISTINCT location FROM devices WHERE location IS NOT NULL AND location != "" ORDER BY location')
+        locations = [row['location'] for row in cursor.fetchall()]
+        
+        cursor.execute('''
+            SELECT DISTINCT product_name 
+            FROM shelves 
+            WHERE product_name IS NOT NULL AND product_name != "" 
+            ORDER BY product_name
+        ''')
+        products = [row['product_name'] for row in cursor.fetchall()]
+        
+        conn.close()
+        
+        return jsonify({
+            'success': True,
+            'alerts': alerts,
+            'stats': {
+                'total_alerts': total_alerts
+            },
+            'filters': {
+                'locations': locations,
+                'products': products
+            }
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
 @app.route('/api/sensor_data/delete', methods=['POST'])
 def delete_sensor_data():
     """API - 刪除感測器歷史數據"""
@@ -625,6 +717,7 @@ def api_sensor_data():
         location = request.args.get('location', '')
         device_id = request.args.get('device_id', '')
         shelf_id = request.args.get('shelf_id', '')
+        product_name = request.args.get('product_name', '')
         limit = int(request.args.get('limit', 50))
         occupied = request.args.get('occupied', '')
         
@@ -652,6 +745,10 @@ def api_sensor_data():
         if shelf_id:
             query += ' AND sd.shelf_id = ?'
             params.append(shelf_id)
+        
+        if product_name:
+            query += ' AND s.product_name = ?'
+            params.append(product_name)
         
         if occupied:
             query += ' AND sd.occupied = ?'
@@ -689,6 +786,10 @@ def api_sensor_data():
         cursor.execute('SELECT DISTINCT location FROM devices WHERE location IS NOT NULL AND location != "" ORDER BY location')
         locations = [row['location'] for row in cursor.fetchall()]
         
+        # 獲取所有不重複的商品名稱（從 shelves 表）
+        cursor.execute('SELECT DISTINCT product_name FROM shelves WHERE product_name IS NOT NULL AND product_name != "" ORDER BY product_name')
+        products = [row['product_name'] for row in cursor.fetchall()]
+        
         conn.close()
         
         return jsonify({
@@ -703,7 +804,8 @@ def api_sensor_data():
             'filters': {
                 'devices': devices,
                 'shelves': shelves,
-                'locations': locations
+                'locations': locations,
+                'products': products
             }
         })
     except Exception as e:

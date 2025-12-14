@@ -1,0 +1,350 @@
+{% extends "base.html" %}
+
+{% block title %}補貨提醒 - 資料庫管理系統{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+    <div>
+        <h2>⚠️ 補貨提醒</h2>
+        <p style="color: #6c757d; font-size: 0.9em; margin: 5px 0 0 0;">
+            <span id="auto-refresh-status">🔄 自動更新中</span> · 每 30 秒刷新一次
+        </p>
+    </div>
+    <button onclick="manualRefresh()" class="btn btn-primary">
+        🔄 立即刷新
+    </button>
+</div>
+
+<div style="background: #d1ecf1; padding: 15px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #17a2b8;">
+    <h4 style="color: #0c5460; margin: 0 0 10px 0;">💡 智能提醒</h4>
+    <ul style="margin: 0; padding-left: 20px; color: #0c5460;">
+        <li>此頁面顯示<strong>已配置商品但目前為空</strong>的貨架</li>
+        <li>只有<strong>已啟用</strong>且<strong>占用狀態為空</strong>的貨架才會出現</li>
+        <li><strong>✨ 當商品被補貨後（數量 > 0），提醒會自動消失</strong></li>
+        <li>系統每 5 秒自動刷新，也可點擊「立即刷新」手動更新</li>
+        <li>可按<strong>區域</strong>或<strong>商品名稱</strong>篩選需要補貨的項目</li>
+    </ul>
+</div>
+
+<!-- 統計卡片 -->
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 20px;">
+    <div class="stat-card" style="border-left-color: #dc3545;">
+        <h3>需補貨項目</h3>
+        <div class="value" id="stat-alerts" style="color: #dc3545;">-</div>
+    </div>
+</div>
+
+<!-- 篩選表單 -->
+<div style="background: #f8f9fa; padding: 20px; border-radius: 10px; margin-bottom: 20px;">
+    <h4 style="margin-bottom: 15px;">🔍 篩選條件</h4>
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px;">
+        <div class="form-group">
+            <label for="filter-location">區域</label>
+            <select id="filter-location" onchange="applyFilters()">
+                <option value="">-- 所有區域 --</option>
+            </select>
+        </div>
+        
+        <div class="form-group">
+            <label for="filter-product">商品名稱</label>
+            <select id="filter-product" onchange="applyFilters()">
+                <option value="">-- 所有商品 --</option>
+            </select>
+        </div>
+    </div>
+</div>
+
+<!-- 補貨列表 -->
+<div id="alert-container">
+    <div style="text-align: center; padding: 40px; color: #999;">
+        <div class="spinner" style="width: 50px; height: 50px; border: 5px solid #f3f3f3; border-top: 5px solid #dc3545; border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 20px;"></div>
+        <p>正在載入補貨提醒...</p>
+    </div>
+</div>
+
+<style>
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+    
+    .alert-card {
+        background: white;
+        border-left: 4px solid #dc3545;
+        border-radius: 6px;
+        padding: 15px;
+        margin-bottom: 12px;
+        transition: all 0.3s;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    
+    .alert-card:hover {
+        box-shadow: 0 3px 6px rgba(220, 53, 69, 0.15);
+        transform: translateX(2px);
+    }
+    
+    .alert-main {
+        display: flex;
+        gap: 15px;
+        align-items: center;
+        flex: 1;
+    }
+    
+    .alert-shelf-id {
+        font-size: 1.1em;
+        font-weight: 600;
+        color: #dc3545;
+        min-width: 70px;
+    }
+    
+    .alert-location {
+        font-size: 0.95em;
+        color: #17a2b8;
+        font-weight: 500;
+        min-width: 100px;
+    }
+    
+    .alert-product {
+        font-size: 1em;
+        color: #2d3748;
+        font-weight: 500;
+        flex: 1;
+    }
+    
+    .alert-time {
+        font-size: 0.9em;
+        color: #6c757d;
+        min-width: 110px;
+        text-align: right;
+    }
+    
+    .alert-badge {
+        background: #dc3545;
+        color: white;
+        padding: 6px 14px;
+        border-radius: 20px;
+        font-size: 0.85em;
+        font-weight: 600;
+        white-space: nowrap;
+    }
+    
+    .alert-list-container {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(600px, 1fr));
+        gap: 12px;
+    }
+    
+    @media (max-width: 768px) {
+        .alert-list-container {
+            grid-template-columns: 1fr;
+        }
+        
+        .alert-main {
+            flex-direction: column;
+            gap: 8px;
+            align-items: flex-start;
+        }
+        
+        .alert-time, .alert-location {
+            text-align: left;
+        }
+    }
+</style>
+
+<script>
+let autoRefreshInterval = null;
+
+// 載入數據
+async function loadData() {
+    try {
+        // 更新狀態指示器
+        const statusElement = document.getElementById('auto-refresh-status');
+        if (statusElement) {
+            statusElement.innerHTML = '🔄 更新中...';
+            statusElement.style.color = '#17a2b8';
+        }
+        
+        // 構建查詢參數
+        const params = new URLSearchParams({
+            location: document.getElementById('filter-location').value,
+            product_name: document.getElementById('filter-product').value
+        });
+        
+        const response = await fetch(`/api/restock_alert?${params}`);
+        const result = await response.json();
+        
+        if (result.success) {
+            updateStatistics(result.stats);
+            updateAlertList(result.alerts);
+            updateFilterOptions(result.filters);
+            
+            // 更新成功提示
+            if (statusElement) {
+                statusElement.innerHTML = '✅ 已更新';
+                statusElement.style.color = '#28a745';
+                setTimeout(() => {
+                    statusElement.innerHTML = '🔄 自動更新中';
+                    statusElement.style.color = '#6c757d';
+                }, 2000);
+            }
+        } else {
+            console.error('載入數據失敗:', result.error);
+            if (statusElement) {
+                statusElement.innerHTML = '❌ 更新失敗';
+                statusElement.style.color = '#dc3545';
+            }
+        }
+    } catch (error) {
+        console.error('載入數據時發生錯誤:', error);
+        const statusElement = document.getElementById('auto-refresh-status');
+        if (statusElement) {
+            statusElement.innerHTML = '❌ 連接錯誤';
+            statusElement.style.color = '#dc3545';
+        }
+    }
+}
+
+// 更新統計資訊
+function updateStatistics(stats) {
+    document.getElementById('stat-alerts').textContent = stats.total_alerts || 0;
+}
+
+// 更新補貨列表
+function updateAlertList(alerts) {
+    const container = document.getElementById('alert-container');
+    
+    if (!alerts || alerts.length === 0) {
+        container.innerHTML = `
+            <div class="empty-state">
+                <p style="font-size: 1.2em;">✅ 太棒了！目前沒有需要補貨的項目</p>
+                <p style="color: #6c757d; margin-top: 10px;">
+                    所有已配置商品的貨架狀態良好<br>
+                    <small style="color: #28a745; font-weight: 500;">
+                        💡 已補貨的貨架會自動從此列表中移除
+                    </small>
+                </p>
+            </div>
+        `;
+        return;
+    }
+    
+    let html = `
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+            <p style="color: #6c757d; margin: 0;">
+                共發現 <strong style="color: #dc3545;">${alerts.length}</strong> 個貨架需要補貨
+            </p>
+            <p style="color: #28a745; font-size: 0.9em; margin: 0;">
+                💡 補貨後提醒會自動消失
+            </p>
+        </div>
+        <div class="alert-list-container">
+    `;
+    
+    alerts.forEach(alert => {
+        const lastUpdate = alert.last_update ? formatTime(alert.last_update) : '無數據';
+        const location = alert.location || '未分配';
+        
+        html += `
+            <div class="alert-card">
+                <div class="alert-main">
+                    <div class="alert-shelf-id">🗂️ ${alert.shelf_id}</div>
+                    <div class="alert-location">📍 ${location}</div>
+                    <div class="alert-product">📦 ${alert.product_name}</div>
+                    <div class="alert-time">🕒 ${lastUpdate}</div>
+                </div>
+                <span class="alert-badge">需補貨</span>
+            </div>
+        `;
+    });
+    
+    html += '</div>';
+    
+    container.innerHTML = html;
+}
+
+// 更新篩選選項
+function updateFilterOptions(filters) {
+    // 更新區域列表
+    const locationSelect = document.getElementById('filter-location');
+    const currentLocation = locationSelect.value;
+    locationSelect.innerHTML = '<option value="">-- 所有區域 --</option>';
+    if (filters.locations) {
+        filters.locations.forEach(location => {
+            if (location) {
+                const option = document.createElement('option');
+                option.value = location;
+                option.textContent = location;
+                if (location === currentLocation) option.selected = true;
+                locationSelect.appendChild(option);
+            }
+        });
+    }
+    
+    // 更新商品列表
+    const productSelect = document.getElementById('filter-product');
+    const currentProduct = productSelect.value;
+    productSelect.innerHTML = '<option value="">-- 所有商品 --</option>';
+    if (filters.products) {
+        filters.products.forEach(product => {
+            if (product) {
+                const option = document.createElement('option');
+                option.value = product;
+                option.textContent = product;
+                if (product === currentProduct) option.selected = true;
+                productSelect.appendChild(option);
+            }
+        });
+    }
+}
+
+// 格式化時間
+function formatTime(timestamp) {
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diffMs = now - date;
+    const diffMins = Math.floor(diffMs / 60000);
+    
+    if (diffMins < 1) return '剛剛';
+    if (diffMins < 60) return `${diffMins} 分鐘前`;
+    
+    const diffHours = Math.floor(diffMins / 60);
+    if (diffHours < 24) return `${diffHours} 小時前`;
+    
+    return date.toLocaleString('zh-TW', {
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit'
+    });
+}
+
+// 應用篩選
+function applyFilters() {
+    loadData();
+}
+
+// 手動刷新
+function manualRefresh() {
+    loadData();
+}
+
+// 頁面載入時初始化
+window.addEventListener('DOMContentLoaded', function() {
+    loadData();
+    
+    // 每 30 秒自動刷新
+    autoRefreshInterval = setInterval(loadData, 5000);
+});
+
+// 頁面卸載時清除定時器
+window.addEventListener('beforeunload', function() {
+    if (autoRefreshInterval) {
+        clearInterval(autoRefreshInterval);
+    }
+});
+</script>
+{% endblock %}
+

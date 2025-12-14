@@ -80,7 +80,7 @@
 <!-- 篩選表單 -->
 <div style="background: #f8f9fa; padding: 20px; border-radius: 10px; margin-bottom: 20px;">
     <h4 style="margin-bottom: 15px;">🔍 篩選條件</h4>
-    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 15px;">
         <div class="form-group">
             <label for="filter-location">區域</label>
             <select id="filter-location" onchange="applyFilters()">
@@ -99,6 +99,13 @@
             <label for="filter-shelf">貨架 ID</label>
             <select id="filter-shelf" onchange="applyFilters()">
                 <option value="">-- 所有貨架 --</option>
+            </select>
+        </div>
+        
+        <div class="form-group">
+            <label for="filter-product">商品名稱</label>
+            <select id="filter-product" onchange="applyFilters()">
+                <option value="">-- 所有商品 --</option>
             </select>
         </div>
         
@@ -171,6 +178,7 @@ async function loadData() {
             location: document.getElementById('filter-location').value,
             device_id: document.getElementById('filter-device').value,
             shelf_id: document.getElementById('filter-shelf').value,
+            product_name: document.getElementById('filter-product').value,
             limit: document.getElementById('filter-limit').value,
             occupied: document.getElementById('filter-occupied').value
         });
@@ -346,6 +354,22 @@ function updateFilterOptions(filters) {
         if (shelf === currentShelf) option.selected = true;
         shelfSelect.appendChild(option);
     });
+    
+    // 更新商品列表
+    const productSelect = document.getElementById('filter-product');
+    const currentProduct = productSelect.value;
+    productSelect.innerHTML = '<option value="">-- 所有商品 --</option>';
+    if (filters.products) {
+        filters.products.forEach(product => {
+            if (product) {  // 過濾空值
+                const option = document.createElement('option');
+                option.value = product;
+                option.textContent = product;
+                if (product === currentProduct) option.selected = true;
+                productSelect.appendChild(option);
+            }
+        });
+    }
 }
 
 // 格式化時間
