@@ -191,17 +191,22 @@
 {% endif %}
 
 <div class="info-box">
-    <h4>💡 設備新增方式</h4>
-    <ol>
-        <li><strong>自動探測（推薦）</strong>：點擊「掃描設備」按鈕，系統會自動發現所有在線的 ESP32S3 設備</li>
-        <li><strong>手動輸入</strong>：如果探測失敗或需要離線新增，可以手動填寫設備資訊</li>
+    <h4>💡 設備新增流程</h4>
+    <ol style="line-height: 2;">
+        <li><strong>步驟 1：探測設備</strong> - 點擊「掃描設備」按鈕，系統會自動發現所有在線的 ESP32S3 設備</li>
+        <li><strong>步驟 2：選擇設備</strong> - 點擊「選擇此設備」按鈕，系統會自動填入設備資訊到下方表單</li>
+        <li><strong>步驟 3：確認資訊</strong> - 檢查並修改設備名稱、指定負責區域（可選）</li>
+        <li><strong>步驟 4：完成新增</strong> - 點擊「✓ 新增設備」按鈕完成新增操作</li>
     </ol>
+    <p style="color: #495057; margin: 10px 0 0 0; font-size: 14px;">
+        💡 <strong>提示：</strong>如果自動探測失敗，您也可以直接在下方表單手動輸入設備資訊。
+    </p>
 </div>
 
 <!-- 設備探測區域 -->
 <div class="scan-section">
     <div class="scan-header">
-        <h3>🔍 自動探測設備</h3>
+        <h3>🔍 步驟 1 & 2：探測並選擇設備</h3>
         <button onclick="scanDevices()" id="scan-btn" class="btn btn-primary">
             <span id="scan-text">📡 掃描設備</span>
         </button>
@@ -231,32 +236,35 @@
 
 <!-- 手動新增表單 -->
 <div class="form-section">
-    <h3>✍️ 手動輸入設備資訊</h3>
+    <h3>📝 步驟 3 & 4：確認資訊並新增設備</h3>
+    <p style="color: #6c757d; margin: 10px 0 25px 0; font-size: 14px;">
+        如果您選擇了上方的設備，資訊已自動填入。請確認無誤後點擊「新增設備」按鈕完成。
+    </p>
     
     <form method="POST" style="max-width: 600px;">
         <input type="hidden" id="from_discovery" name="from_discovery" value="false">
         
         <div class="form-group">
-            <label for="device_id">設備 ID * <small style="color: #6c757d;">(必須唯一)</small></label>
+            <label for="device_id">設備 ID * <small style="color: #6c757d;">(必須唯一，已自動填入或手動輸入)</small></label>
             <input type="text" id="device_id" name="device_id" required 
                    placeholder="例如: ESP32S3_A1B2C3D4"
                    style="font-family: 'Courier New', monospace;">
         </div>
         
         <div class="form-group">
-            <label for="device_name">設備名稱 *</label>
+            <label for="device_name">設備名稱 * <small style="color: #6c757d;">(可修改)</small></label>
             <input type="text" id="device_name" name="device_name" required 
                    placeholder="例如: 倉庫 A 區感測器">
         </div>
         
         <div class="form-group">
-            <label for="location">負責區域 <small style="color: #6c757d;">(選填，可稍後指定)</small></label>
+            <label for="location">負責區域 <small style="color: #6c757d;">(選填，建議現在指定)</small></label>
             <input type="text" id="location" name="location" 
                    placeholder="例如: 倉庫 A 區">
         </div>
         
         <div class="action-buttons" style="margin-top: 30px;">
-            <button type="submit" class="btn btn-primary" style="padding: 12px 30px;">
+            <button type="submit" class="btn btn-primary" style="padding: 12px 40px; font-size: 16px; font-weight: 600;">
                 ✓ 新增設備
             </button>
             <a href="{{ url_for('devices') }}" class="btn" style="background: #6c757d; color: white; padding: 12px 30px;">
@@ -369,20 +377,50 @@
         // 添加選中狀態
         cardElement.classList.add('selected');
         
+        // 顯示成功提示
+        const formSection = document.querySelector('.form-section');
+        
+        // 創建提示訊息
+        let existingAlert = document.getElementById('device-selected-alert');
+        if (existingAlert) {
+            existingAlert.remove();
+        }
+        
+        const alert = document.createElement('div');
+        alert.id = 'device-selected-alert';
+        alert.style.cssText = 'background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%); padding: 15px 20px; border-radius: 8px; border-left: 4px solid #28a745; margin-bottom: 20px; display: flex; align-items: center; gap: 12px;';
+        alert.innerHTML = `
+            <span style="font-size: 24px;">✅</span>
+            <div>
+                <strong style="color: #155724; font-size: 15px;">設備已選擇</strong>
+                <p style="color: #155724; margin: 5px 0 0 0; font-size: 14px;">
+                    已自動填入 <strong>${device.device_id}</strong> 的資訊，請確認並修改（如需要），然後點擊下方「新增設備」按鈕完成。
+                </p>
+            </div>
+        `;
+        
+        formSection.insertBefore(alert, formSection.firstChild);
+        
         // 滾動到表單
         setTimeout(() => {
-            document.querySelector('.form-section').scrollIntoView({ 
+            formSection.scrollIntoView({ 
                 behavior: 'smooth', 
-                block: 'center' 
+                block: 'start' 
             });
         }, 100);
         
         // 高亮表單
-        const formSection = document.querySelector('.form-section');
-        formSection.style.boxShadow = '0 0 0 3px rgba(102, 126, 234, 0.3)';
+        formSection.style.boxShadow = '0 0 0 4px rgba(40, 167, 69, 0.3)';
         setTimeout(() => {
             formSection.style.boxShadow = '0 2px 8px rgba(0,0,0,0.08)';
         }, 2000);
+        
+        // 3秒後淡出提示
+        setTimeout(() => {
+            alert.style.transition = 'opacity 0.5s';
+            alert.style.opacity = '0';
+            setTimeout(() => alert.remove(), 500);
+        }, 3000);
     }
     
     function formatUptime(ms) {
