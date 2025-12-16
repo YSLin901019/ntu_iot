@@ -46,6 +46,43 @@ SHELF_CONFIG = {
 # 距離閾值：檢測距離小於最大距離 N cm 以上就判定為有貨
 OCCUPIED_THRESHOLD = 2.0  # 公分
 
+# ==================== 設備特定主題工具函數 ====================
+def get_device_command_topic(device_id: str) -> str:
+    """
+    獲取設備特定的命令主題
+    
+    參數:
+        device_id: 設備 ID (例如: ESP32S3_001)
+    
+    返回:
+        str: 設備專屬命令主題 (例如: shelf/ESP32S3_001/command)
+    """
+    return f"shelf/{device_id}/command"
+
+def get_device_calibrate_topic(device_id: str) -> str:
+    """
+    獲取設備特定的校正主題
+    
+    參數:
+        device_id: 設備 ID
+    
+    返回:
+        str: 設備專屬校正主題 (例如: shelf/ESP32S3_001/calibrate)
+    """
+    return f"shelf/{device_id}/calibrate"
+
+def get_device_calibrate_response_topic(device_id: str) -> str:
+    """
+    獲取設備特定的校正回應主題
+    
+    參數:
+        device_id: 設備 ID
+    
+    返回:
+        str: 設備專屬校正回應主題
+    """
+    return f"shelf/{device_id}/calibrate/response"
+
 # ==================== 顏色代碼 ====================
 class Colors:
     HEADER = '\033[95m'

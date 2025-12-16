@@ -130,15 +130,22 @@ async function loadShelfConfig(deviceId) {
                     const statusIcon = shelf.enabled ? '✅' : '❌';
                     const statusText = shelf.enabled ? '已啟用' : '已停用';
                     
+                    // 🔑 關鍵：組合完整的 shelf_id
+                    // ESP32 回傳的是本地 ID (如 B1)，需要組合成完整 ID
+                    const localShelfId = shelf.shelf_id;  // 本地貨架 ID: B1
+                    const fullShelfId = `${deviceId}_${localShelfId}`;  // 完整 ID: ESP32S3_C04B4D9B4DC_B1
+                    
                     // 貨架長度
                     const shelfLength = shelf.shelf_length > 0 ? `${shelf.shelf_length.toFixed(1)} cm` : '未校正';
                     const lengthColor = shelf.shelf_length > 0 ? '#28a745' : '#ffc107';
                     
                     html += `
-                        <div class="shelf-card ${enabledClass}" id="shelf-card-${shelf.shelf_id}" data-shelf-id="${shelf.shelf_id}">
+                        <div class="shelf-card ${enabledClass}" id="shelf-card-${fullShelfId}" data-full-shelf-id="${fullShelfId}" data-local-shelf-id="${localShelfId}" data-device-id="${deviceId}">
                             <div style="display: flex; justify-content: space-between; align-items: flex-start;">
                                 <div style="flex: 1;">
-                                    <h4 style="margin: 0 0 10px 0;">${statusIcon} 貨架 ${shelf.shelf_id}</h4>
+                                    <h4 style="margin: 0 0 10px 0;">${statusIcon} 貨架 ${localShelfId}
+                                        <span style="font-size: 0.8em; color: #999; font-weight: normal;">(${deviceId})</span>
+                                    </h4>
                                     <p style="margin: 5px 0; color: #666; font-size: 0.9em;">
                                         <strong>GPIO:</strong> ${shelf.gpio}<br>
                                         <strong>位置:</strong> ${shelf.index}<br>
@@ -147,20 +154,23 @@ async function loadShelfConfig(deviceId) {
                                     </p>
                     `;
                     
-                    // 商品資訊區塊（從資料庫獲取）
+                    // 商品資訊區塊（從資料庫獲取）- 使用完整 shelf_id
                     html += `
-                                    <div id="product-info-${shelf.shelf_id}" style="margin-top: 10px; padding: 10px; background: rgba(255,255,255,0.5); border-radius: 5px;">
+                                    <div id="product-info-${fullShelfId}" style="margin-top: 10px; padding: 10px; background: rgba(255,255,255,0.5); border-radius: 5px;">
                                         <div style="font-size: 0.85em; color: #999;">載入商品資訊中...</div>
                                     </div>
                                 </div>
                                 <div style="display: flex; flex-direction: column; gap: 8px;">
                     `;
                     
+                    // 🔑 所有按鈕都使用完整的 shelf_id
+                    
                     // 校正按鈕（總是顯示）
                     html += `
-                        <button onclick="calibrateShelf('${deviceId}', '${shelf.shelf_id}')" 
+                        <button onclick="calibrateShelf('${deviceId}', '${fullShelfId}')" 
                                 class="btn btn-warning" 
-                                style="padding: 8px 16px;">
+                                style="padding: 8px 16px;"
+                                title="校正 ${deviceId} 的 ${localShelfId} 貨架">
                             📏 校正
                         </button>
                     `;
@@ -168,17 +178,19 @@ async function loadShelfConfig(deviceId) {
                     // 啟用/停用按鈕
                     if (shelf.enabled) {
                         html += `
-                            <button onclick="disableShelf('${shelf.shelf_id}')" 
+                            <button onclick="disableShelf('${fullShelfId}')" 
                                     class="btn btn-danger" 
-                                    style="padding: 8px 16px;">
+                                    style="padding: 8px 16px;"
+                                    title="停用 ${deviceId} 的 ${localShelfId} 貨架">
                                 停用
                             </button>
                         `;
                     } else {
                         html += `
-                            <button onclick="enableShelf('${shelf.shelf_id}')" 
+                            <button onclick="enableShelf('${fullShelfId}')" 
                                     class="btn btn-success" 
-                                    style="padding: 8px 16px;">
+                                    style="padding: 8px 16px;"
+                                    title="啟用 ${deviceId} 的 ${localShelfId} 貨架">
                                 啟用
                             </button>
                         `;
@@ -186,9 +198,10 @@ async function loadShelfConfig(deviceId) {
                     
                     // 配置商品按鈕（所有貨架都顯示，但會在點擊時檢查）
                     html += `
-                        <button onclick="configureProduct('${deviceId}', '${shelf.shelf_id}', ${shelf.enabled})" 
+                        <button onclick="configureProduct('${deviceId}', '${fullShelfId}', ${shelf.enabled})" 
                                 class="btn btn-primary" 
-                                style="padding: 8px 16px;">
+                                style="padding: 8px 16px;"
+                                title="配置商品到 ${deviceId} 的 ${localShelfId} 貨架">
                             📦 配置商品
                         </button>
                     `;
@@ -207,10 +220,11 @@ async function loadShelfConfig(deviceId) {
             
             container.innerHTML = html;
             
-            // 載入所有貨架的商品資訊
+            // 載入所有貨架的商品資訊（使用完整 shelf_id）
             if (config.shelves && config.shelves.length > 0) {
                 config.shelves.forEach(shelf => {
-                    loadProductInfo(shelf.shelf_id);
+                    const fullShelfId = `${deviceId}_${shelf.shelf_id}`;
+                    loadProductInfo(fullShelfId);
                 });
             }
         } else {

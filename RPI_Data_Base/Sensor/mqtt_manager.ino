@@ -18,14 +18,18 @@ bool mqtt_ip_resolved = false;      // IP 是否已解析
 // ---------- MQTT 主題設定 ----------
 const char* mqtt_topic_sensor = "shelf/sensor";      // 感測器數據主題
 const char* mqtt_topic_status = "shelf/status";      // 狀態主題
-const char* mqtt_topic_command = "shelf/command";    // 命令主題（訂閱）
+const char* mqtt_topic_command = "shelf/command";    // 命令主題（舊版，保留向下兼容）
 const char* mqtt_topic_discovery = "shelf/discovery";  // 設備探測主題（訂閱）
 const char* mqtt_topic_discovery_response = "shelf/discovery/response";  // 設備探測回應主題
 const char* mqtt_topic_heartbeat = "shelf/heartbeat";  // 心跳檢測主題（訂閱）
 const char* mqtt_topic_heartbeat_response = "shelf/heartbeat/response";  // 心跳檢測回應主題
-const char* mqtt_topic_shelf_config_request = "shelf/config/request";  // 貨架配置查詢主題（訂閱）
-const char* mqtt_topic_shelf_config_response = "shelf/config/response";  // 貨架配置回應主題
-const char* mqtt_topic_calibrate_response = "shelf/calibrate/response";  // 校正結果回應主題
+
+// ✅ 設備特定主題（多設備支援 - 動態生成）
+String device_command_topic;               // 設備專屬命令主題：shelf/{device_id}/command
+String device_config_request_topic;        // 配置查詢請求主題：shelf/{device_id}/config/request
+String device_config_response_topic;       // 配置查詢回應主題：shelf/{device_id}/config/response
+String device_calibrate_response_topic;    // 校正結果回應主題：shelf/{device_id}/calibrate/response
+
 String serial_number = "";
 String device_id = "";
 
@@ -57,6 +61,20 @@ void getDeviceId() {
   serial_number = String((uint32_t)(chipid >> 32), HEX) + String((uint32_t)chipid, HEX);
   serial_number.toUpperCase();
   device_id = "ESP32S3_" + serial_number;
+  
+  // ✅ 初始化設備特定主題
+  device_command_topic = "shelf/" + device_id + "/command";
+  device_calibrate_response_topic = "shelf/" + device_id + "/calibrate/response";
+  
+  Serial.println();
+  Serial.println("========================================");
+  Serial.print("[Device] 設備 ID: ");
+  Serial.println(device_id);
+  Serial.print("[Device] 命令主題: ");
+  Serial.println(device_command_topic);
+  Serial.print("[Device] 校正回應主題: ");
+  Serial.println(device_calibrate_response_topic);
+  Serial.println("========================================");
 }
 
 // ---------- 解析 MQTT 伺服器位址 ----------
@@ -211,26 +229,44 @@ void reconnectMQTT() {
     Serial.println(" 成功！");
     Serial.print("[MQTT] 客戶端 ID: ");
     Serial.println(clientId);
+    Serial.println();
+    Serial.println("========================================");
+    Serial.println("[MQTT] 開始訂閱主題...");
+    Serial.println("========================================");
     
-    // 訂閱命令主題
-    mqttClient.subscribe(mqtt_topic_command);
-    Serial.print("[MQTT] 已訂閱主題: ");
-    Serial.println(mqtt_topic_command);
+    // ✅ 訂閱設備專屬命令主題（多設備支援）
+    mqttClient.subscribe(device_command_topic.c_str());
+    Serial.print("[MQTT] ✓ 已訂閱設備專屬命令主題: ");
+    Serial.println(device_command_topic);
     
-    // 訂閱設備探測主題
+    // 訂閱設備探測主題（廣播，所有設備共用）
     mqttClient.subscribe(mqtt_topic_discovery);
-    Serial.print("[MQTT] 已訂閱主題: ");
+    Serial.print("[MQTT] ✓ 已訂閱探測主題: ");
     Serial.println(mqtt_topic_discovery);
     
-    // 訂閱心跳檢測主題
+    // 訂閱心跳檢測主題（廣播，所有設備共用）
     mqttClient.subscribe(mqtt_topic_heartbeat);
-    Serial.print("[MQTT] 已訂閱主題: ");
+    Serial.print("[MQTT] ✓ 已訂閱心跳主題: ");
     Serial.println(mqtt_topic_heartbeat);
     
-    // 訂閱貨架配置查詢主題
-    mqttClient.subscribe(mqtt_topic_shelf_config_request);
-    Serial.print("[MQTT] 已訂閱主題: ");
-    Serial.println(mqtt_topic_shelf_config_request);
+    // ✅ 訂閱設備特定的配置查詢主題
+    device_config_request_topic = "shelf/" + String(device_id) + "/config/request";
+    mqttClient.subscribe(device_config_request_topic.c_str());
+    Serial.print("[MQTT] ✓ 已訂閱配置查詢主題: ");
+    Serial.println(device_config_request_topic);
+    
+    // ✅ 設置設備特定的回應主題
+    device_config_response_topic = "shelf/" + String(device_id) + "/config/response";
+    device_calibrate_response_topic = "shelf/" + String(device_id) + "/calibrate/response";
+    Serial.print("[MQTT] ℹ 配置回應主題: ");
+    Serial.println(device_config_response_topic);
+    Serial.print("[MQTT] ℹ 校正回應主題: ");
+    Serial.println(device_calibrate_response_topic);
+    
+    Serial.println("========================================");
+    Serial.println("[MQTT] 所有主題訂閱完成！");
+    Serial.println("========================================");
+    Serial.println();
     
     // 發送上線訊息
     publishStatus("online");
@@ -270,8 +306,14 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
   }
   Serial.println(message);
   
-  // 處理命令
-  if (strcmp(topic, mqtt_topic_command) == 0) {
+  // ✅ 處理設備專屬命令（優先檢查）
+  if (strcmp(topic, device_command_topic.c_str()) == 0) {
+    Serial.println("[MQTT] ✓ 這是發給本設備的命令");
+    handleMQTTCommand(message);
+  }
+  // 處理舊版通用命令（向下兼容，但會有警告）
+  else if (strcmp(topic, mqtt_topic_command) == 0) {
+    Serial.println("[MQTT] ⚠ 警告：收到舊版通用命令，建議使用設備專屬主題");
     handleMQTTCommand(message);
   }
   // 處理設備探測請求
@@ -282,8 +324,9 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
   else if (strcmp(topic, mqtt_topic_heartbeat) == 0) {
     handleHeartbeatRequest(message);
   }
-  // 處理貨架配置查詢請求
-  else if (strcmp(topic, mqtt_topic_shelf_config_request) == 0) {
+  // ✅ 處理設備特定的配置查詢請求
+  else if (strcmp(topic, device_config_request_topic.c_str()) == 0) {
+    Serial.println("[MQTT] 收到配置查詢請求（設備特定主題）");
     handleShelfConfigRequest(message);
   }
 }
@@ -469,11 +512,21 @@ void publishCalibrateResult(const char* shelfId, float length, bool success) {
   response += "\"shelf_length\":" + String(length, 2);
   response += "}";
   
-  // 發送到校正結果主題
-  mqttClient.publish(mqtt_topic_calibrate_response, response.c_str());
-  
-  Serial.print("[MQTT] 已發送校正結果: ");
+  // ✅ 發送到設備專屬校正回應主題（多設備支援）
+  Serial.println();
+  Serial.println("========================================");
+  Serial.println("[Calibrate] 發送校正結果...");
+  Serial.print("[Calibrate] 目標主題: ");
+  Serial.println(device_calibrate_response_topic);
+  Serial.print("[Calibrate] 結果數據: ");
   Serial.println(response);
+  
+  // ✅ 不使用 retained，避免舊消息被保留
+  mqttClient.publish(device_calibrate_response_topic.c_str(), response.c_str(), false);
+  
+  Serial.println("[Calibrate] ✓ 校正結果已發送");
+  Serial.println("========================================");
+  Serial.println();
 }
 
 // ---------- 處理設備探測請求 ----------
@@ -590,10 +643,11 @@ void handleShelfConfigRequest(String message) {
   
   // 發送貨架配置回應
   if (mqttClient.connected()) {
+    // ✅ 使用設備特定的回應主題
     Serial.print("[ShelfConfig] 正在發送到主題: ");
-    Serial.println(mqtt_topic_shelf_config_response);
+    Serial.println(device_config_response_topic);
     
-    bool result = mqttClient.publish(mqtt_topic_shelf_config_response, response.c_str());
+    bool result = mqttClient.publish(device_config_response_topic.c_str(), response.c_str());
     
     if (result) {
       Serial.println("[ShelfConfig] ✓ 貨架配置已成功發送");

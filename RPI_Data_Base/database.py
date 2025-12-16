@@ -3,12 +3,62 @@
 """
 數據庫操作模塊
 處理所有與 SQLite 數據庫相關的操作
+支援多設備架構：shelf_id 格式為 device_id_local_shelf_id
 """
 
 import sqlite3
 import datetime
 from typing import Dict, List, Optional, Tuple
 from config import DB_FILE, Colors, SHELF_CONFIG
+
+# ==================== Shelf ID 工具函數 ====================
+def make_shelf_id(device_id: str, local_shelf_id: str) -> str:
+    """
+    組合完整的 shelf_id
+    
+    參數:
+        device_id: 設備 ID (例如: ESP32S3_001)
+        local_shelf_id: 本地貨架 ID (例如: A1)
+    
+    返回:
+        str: 完整的 shelf_id (例如: ESP32S3_001_A1)
+    """
+    return f"{device_id}_{local_shelf_id}"
+
+def parse_shelf_id(shelf_id: str) -> Tuple[Optional[str], str]:
+    """
+    解析 shelf_id 為 device_id 和 local_shelf_id
+    
+    參數:
+        shelf_id: 完整的 shelf_id (例如: ESP32S3_001_A1)
+    
+    返回:
+        Tuple[device_id, local_shelf_id]: 
+            如果格式正確，返回 (device_id, local_shelf_id)
+            如果格式錯誤，返回 (None, shelf_id)
+    """
+    if '_' in shelf_id:
+        parts = shelf_id.rsplit('_', 1)  # 從右邊分割一次
+        if len(parts) == 2:
+            device_id = parts[0]
+            local_shelf_id = parts[1]
+            return (device_id, local_shelf_id)
+    
+    # 無法解析，可能是舊格式或單一ID
+    return (None, shelf_id)
+
+def get_local_shelf_id(shelf_id: str) -> str:
+    """
+    從完整的 shelf_id 中提取本地貨架 ID
+    
+    參數:
+        shelf_id: 完整的 shelf_id (例如: ESP32S3_001_A1)
+    
+    返回:
+        str: 本地貨架 ID (例如: A1)
+    """
+    _, local_id = parse_shelf_id(shelf_id)
+    return local_id
 
 # ==================== 數據庫初始化 ====================
 def init_database():
@@ -748,6 +798,7 @@ def sync_shelf_config_from_esp32(device_id: str, shelf_config_list: List[Dict]) 
                 {'shelf_id': 'A2', 'index': 1, 'gpio': 5, 'enabled': False},
                 ...
             ]
+            注意：shelf_id 是本地ID（如 A1），需要組合成完整ID
             
     Returns:
         bool: 同步成功返回 True，失敗返回 False
@@ -757,13 +808,16 @@ def sync_shelf_config_from_esp32(device_id: str, shelf_config_list: List[Dict]) 
         cursor = conn.cursor()
         
         for shelf_config in shelf_config_list:
-            shelf_id = shelf_config['shelf_id']
+            local_shelf_id = shelf_config['shelf_id']  # ESP32 回傳的本地 ID (如 A1)
             gpio = shelf_config.get('gpio')
             enabled = 1 if shelf_config.get('enabled', False) else 0
             position_index = shelf_config.get('index', 0)
             
+            # ✅ 組合完整的 shelf_id (格式: device_id_local_shelf_id)
+            full_shelf_id = make_shelf_id(device_id, local_shelf_id)
+            
             # 檢查貨架是否存在
-            cursor.execute('SELECT shelf_id FROM shelves WHERE shelf_id = ?', (shelf_id,))
+            cursor.execute('SELECT shelf_id FROM shelves WHERE shelf_id = ?', (full_shelf_id,))
             exists = cursor.fetchone()
             
             if exists:
@@ -772,14 +826,14 @@ def sync_shelf_config_from_esp32(device_id: str, shelf_config_list: List[Dict]) 
                     UPDATE shelves 
                     SET gpio = ?, enabled = ?, position_index = ?, updated_at = CURRENT_TIMESTAMP
                     WHERE shelf_id = ?
-                ''', (gpio, enabled, position_index, shelf_id))
+                ''', (gpio, enabled, position_index, full_shelf_id))
             else:
                 # 創建新貨架（使用預設 max_distance）
                 cursor.execute('''
                     INSERT INTO shelves 
                     (shelf_id, device_id, max_distance, gpio, enabled, position_index)
                     VALUES (?, ?, ?, ?, ?, ?)
-                ''', (shelf_id, device_id, 30.0, gpio, enabled, position_index))
+                ''', (full_shelf_id, device_id, 30.0, gpio, enabled, position_index))
         
         conn.commit()
         conn.close()

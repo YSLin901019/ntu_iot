@@ -30,13 +30,20 @@ class ShelfConfigManager:
         """MQTT 連線回調"""
         if rc == 0:
             print(f"[ShelfConfig] 已連接到 MQTT Broker")
-            # 訂閱貨架配置回應主題
-            client.subscribe(TOPIC_SHELF_CONFIG_RESPONSE)
-            print(f"[ShelfConfig] 已訂閱主題: {TOPIC_SHELF_CONFIG_RESPONSE}")
-            # 訂閱校正回應主題
-            client.subscribe("shelf/calibrate/response")
-            print(f"[ShelfConfig] 已訂閱主題: shelf/calibrate/response")
+            
+            # ✅ 訂閱設備特定的校正回應主題
+            if hasattr(self, 'current_device_id') and self.current_device_id:
+                from config import get_device_calibrate_response_topic
+                calibrate_topic = get_device_calibrate_response_topic(self.current_device_id)
+                client.subscribe(calibrate_topic, qos=1)
+                print(f"[ShelfConfig] 已訂閱校正回應主題: {calibrate_topic}")
+            
+            # 訂閱貨架配置回應主題（通配符模式支援多設備）
+            client.subscribe("shelf/+/config/response", qos=1)
+            print(f"[ShelfConfig] 已訂閱配置回應主題: shelf/+/config/response")
+            
             # 標記連接完成
+            time.sleep(1)  # 等待訂閱生效
             self.connected.set()
         else:
             print(f"[ShelfConfig] 連接失敗，錯誤碼: {rc}")
@@ -45,17 +52,45 @@ class ShelfConfigManager:
         """MQTT 訊息回調"""
         try:
             payload = msg.payload.decode('utf-8')
+            topic = msg.topic
             
-            if msg.topic == TOPIC_SHELF_CONFIG_RESPONSE:
-                print(f"[ShelfConfig] 收到貨架配置: {payload}")
-                self.response_data = json.loads(payload)
-                self.response_received.set()
-            elif msg.topic == "shelf/calibrate/response":
-                print(f"[Calibrate] 收到校正結果: {payload}")
-                self.calibrate_response = json.loads(payload)
-                self.calibrate_received.set()
+            print(f"[ShelfConfig] 收到訊息 [{topic}]: {payload[:100]}...")
+            
+            # ✅ 匹配設備特定的配置回應主題（使用通配符訂閱 shelf/+/config/response）
+            if "/config/response" in topic:
+                print(f"[ShelfConfig] ✓ 收到貨架配置回應")
+                data = json.loads(payload)
+                # 驗證設備ID是否匹配
+                if hasattr(self, 'current_device_id') and self.current_device_id:
+                    if data.get('device_id') == self.current_device_id:
+                        self.response_data = data
+                        self.response_received.set()
+                    else:
+                        print(f"[ShelfConfig] ⚠ 設備ID不匹配，忽略（期望: {self.current_device_id}, 收到: {data.get('device_id')}）")
+                else:
+                    self.response_data = data
+                    self.response_received.set()
+            # ✅ 匹配設備特定的校正回應主題
+            elif "/calibrate/response" in topic:
+                print(f"[Calibrate] ✓ 收到校正結果")
+                data = json.loads(payload)
+                # 驗證設備ID是否匹配
+                if hasattr(self, 'current_device_id') and self.current_device_id:
+                    if data.get('device_id') == self.current_device_id:
+                        print(f"[Calibrate] ✓ 設備ID匹配: {self.current_device_id}")
+                        self.calibrate_response = data
+                        self.calibrate_received.set()
+                    else:
+                        print(f"[Calibrate] ⚠ 設備ID不匹配，忽略（期望: {self.current_device_id}, 收到: {data.get('device_id')}）")
+                else:
+                    self.calibrate_response = data
+                    self.calibrate_received.set()
+            else:
+                print(f"[ShelfConfig] ⚠ 未知主題: {topic}")
         except Exception as e:
-            print(f"[ShelfConfig] 解析訊息失敗: {e}")
+            print(f"[ShelfConfig] ✗ 解析訊息失敗: {e}")
+            import traceback
+            traceback.print_exc()
     
     def query_shelf_config(self, device_id, timeout=SHELF_CONFIG_TIMEOUT):
         """
@@ -84,6 +119,7 @@ class ShelfConfigManager:
         self.response_data = None
         self.response_received.clear()
         self.connected.clear()
+        self.current_device_id = device_id  # 記錄當前設備ID，用於訂閱
         
         # 創建 MQTT 客戶端（使用唯一的 Client ID 避免衝突）
         import random
@@ -106,9 +142,12 @@ class ShelfConfigManager:
             print(f"[ShelfConfig] 連接已建立，等待 1 秒確保訂閱完成...")
             time.sleep(1)  # 增加等待時間確保訂閱完成
             
-            # 發送查詢請求
+            # ✅ 使用設備特定的配置請求主題
+            device_config_request_topic = f"shelf/{device_id}/config/request"
             request = json.dumps({"device_id": device_id})
-            result = self.client.publish(TOPIC_SHELF_CONFIG_REQUEST, request, qos=1)  # 使用 QoS 1
+            result = self.client.publish(device_config_request_topic, request, qos=1)  # 使用 QoS 1
+            
+            print(f"[ShelfConfig] 發送到主題: {device_config_request_topic}")
             
             if result.rc == mqtt.MQTT_ERR_SUCCESS:
                 print(f"[ShelfConfig] 已發送查詢請求: {request}")
@@ -147,18 +186,29 @@ class ShelfConfigManager:
         
         Args:
             device_id: 設備 ID
-            shelf_id: 貨架 ID
+            shelf_id: 完整的貨架 ID (格式: device_id_local_shelf_id)
             timeout: 超時時間（秒）
             
         Returns:
             dict: {'success': bool, 'shelf_length': float, 'error': str}
         """
-        print(f"[Calibrate] 開始校正貨架 {shelf_id} (設備: {device_id})...")
+        print(f"\n{'='*60}")
+        print(f"[Calibrate] 開始校正貨架")
+        print(f"  設備ID: {device_id}")
+        print(f"  完整貨架ID: {shelf_id}")
+        
+        # ✅ 解析 shelf_id，提取本地貨架 ID
+        from database import parse_shelf_id
+        parsed_device_id, local_shelf_id = parse_shelf_id(shelf_id)
+        
+        print(f"  本地貨架ID: {local_shelf_id}")
+        print(f"{'='*60}\n")
         
         # 重置回應
         self.calibrate_response = None
         self.calibrate_received.clear()
         self.connected.clear()
+        self.current_device_id = device_id  # 記錄當前設備ID
         
         # 創建 MQTT 客戶端（使用唯一的 Client ID 避免衝突）
         import random
@@ -179,9 +229,16 @@ class ShelfConfigManager:
             
             time.sleep(1)  # 確保訂閱完成
             
-            # 發送校正命令
-            command = f"calibrate {shelf_id}"
-            result = self.client.publish("shelf/command", command, qos=1)  # 使用 QoS 1
+            # ✅ 使用設備特定的命令主題和本地貨架ID
+            from config import get_device_command_topic
+            device_command_topic = get_device_command_topic(device_id)
+            command = f"calibrate {local_shelf_id}"  # 使用本地ID (如 A1)
+            
+            print(f"[Calibrate] 發送校正命令")
+            print(f"  MQTT主題: {device_command_topic}")
+            print(f"  命令內容: {command}")
+            
+            result = self.client.publish(device_command_topic, command, qos=1)  # 使用 QoS 1
             
             if result.rc == mqtt.MQTT_ERR_SUCCESS:
                 print(f"[Calibrate] 已發送校正命令: {command}")
@@ -197,9 +254,9 @@ class ShelfConfigManager:
                         length = self.calibrate_response.get('shelf_length', 0.0)
                         print(f"[Calibrate] 校正成功！長度: {length:.2f} cm")
                         
-                        # 更新資料庫
+                        # ✅ 更新資料庫（使用完整的 shelf_id）
                         from database import update_shelf_calibration
-                        update_shelf_calibration(shelf_id, length)
+                        update_shelf_calibration(shelf_id, length)  # shelf_id已經是完整ID
                         
                         time.sleep(0.2)  # 確保數據完整
                         return {
