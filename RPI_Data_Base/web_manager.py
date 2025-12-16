@@ -455,14 +455,29 @@ def configure_shelf_product(shelf_id):
         # GET 請求 - 顯示配置頁面
         # 獲取所有商品列表
         cursor.execute('SELECT * FROM products ORDER BY product_name')
-        products = [dict(row) for row in cursor.fetchall()]
+        all_products = [dict(row) for row in cursor.fetchall()]
+        
+        # ✅ 獲取已被其他貨架使用的商品ID（排除當前貨架）
+        cursor.execute('''
+            SELECT DISTINCT product_id 
+            FROM shelves 
+            WHERE product_id IS NOT NULL 
+              AND shelf_id != ?
+        ''', (shelf_id,))
+        used_product_ids = [row['product_id'] for row in cursor.fetchall()]
+        
+        # ✅ 過濾掉已被其他貨架使用的商品（獨占模式）
+        available_products = [
+            p for p in all_products 
+            if p['product_id'] not in used_product_ids or p['product_id'] == shelf.get('product_id')
+        ]
         
         conn.close()
         
         return render_template('configure_shelf.html', 
                              shelf=shelf, 
                              device=device,
-                             products=products)
+                             products=available_products)
                              
     except Exception as e:
         return f"錯誤: {e}", 500

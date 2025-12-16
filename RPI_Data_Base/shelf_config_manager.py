@@ -229,6 +229,12 @@ class ShelfConfigManager:
             
             time.sleep(1)  # 確保訂閱完成
             
+            # ✅ 清空可能收到的舊消息（retained messages）
+            print(f"[Calibrate] 清空舊回應...")
+            self.calibrate_response = None
+            self.calibrate_received.clear()
+            time.sleep(0.5)  # 等待可能的舊消息被處理
+            
             # ✅ 使用設備特定的命令主題和本地貨架ID
             from config import get_device_command_topic
             device_command_topic = get_device_command_topic(device_id)
@@ -250,6 +256,12 @@ class ShelfConfigManager:
             print(f"[Calibrate] 等待校正完成（超時 {timeout} 秒）...")
             if self.calibrate_received.wait(timeout):
                 if self.calibrate_response:
+                    # ✅ 驗證收到的結果是否為當前請求的貨架
+                    response_shelf_id = self.calibrate_response.get('shelf_id', '')
+                    if response_shelf_id != local_shelf_id:
+                        print(f"[Calibrate] ⚠ 收到的貨架ID不匹配！期望: {local_shelf_id}, 收到: {response_shelf_id}")
+                        return {'success': False, 'error': f'收到錯誤的貨架回應（期望: {local_shelf_id}, 收到: {response_shelf_id}）'}
+                    
                     if self.calibrate_response.get('success'):
                         length = self.calibrate_response.get('shelf_length', 0.0)
                         print(f"[Calibrate] 校正成功！長度: {length:.2f} cm")
