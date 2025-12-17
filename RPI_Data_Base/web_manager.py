@@ -335,11 +335,48 @@ def delete_product(product_id):
     try:
         conn = get_db()
         cursor = conn.cursor()
+        
+        # 1) 先解除所有貨架對此商品的綁定（避免殘留顯示/資料不一致）
+        cursor.execute('''
+            UPDATE shelves
+            SET product_id = NULL,
+                product_name = NULL,
+                product_length = NULL,
+                stock_quantity = 0,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE product_id = ?
+        ''', (product_id,))
+        unbound_count = cursor.rowcount
+        
+        # 2) 清理與此商品相關的庫存變動紀錄
+        # stock_changes.product_id NOT NULL 且有外鍵，先刪除避免刪商品失敗
+        cursor.execute('DELETE FROM stock_changes WHERE product_id = ?', (product_id,))
+        stock_change_count = cursor.rowcount
+        
+        # 3) 刪除商品本體
         cursor.execute('DELETE FROM products WHERE product_id = ?', (product_id,))
+        deleted_count = cursor.rowcount
+        
         conn.commit()
         conn.close()
-        return jsonify({'success': True})
+        
+        if deleted_count == 0:
+            return jsonify({
+                'success': False,
+                'error': f'找不到商品 {product_id}'
+            }), 404
+        
+        return jsonify({
+            'success': True,
+            'unbound_shelves': unbound_count,
+            'deleted_stock_changes': stock_change_count
+        })
     except Exception as e:
+        try:
+            conn.rollback()
+            conn.close()
+        except Exception:
+            pass
         return jsonify({'success': False, 'error': str(e)}), 500
 
 # ==================== 路由 - 貨架管理 ====================
