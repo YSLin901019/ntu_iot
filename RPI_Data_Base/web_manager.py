@@ -5,7 +5,7 @@ Web UI 資料庫管理工具
 使用 Flask 提供 Web 界面來管理設備、貨架、商品和查詢數據
 """
 
-from flask import Flask, render_template, request, jsonify, redirect, url_for
+from flask import Flask, render_template, request, jsonify, redirect, url_for, flash
 import sqlite3
 from datetime import datetime
 import os
@@ -43,6 +43,7 @@ except ImportError as e:
     print(f"警告: 貨架配置模塊未載入 - {e}")
 
 app = Flask(__name__)
+app.secret_key = 'smart-warehouse-secret-key-2024'  # Flask session 和 flash 訊息需要
 DB_FILE = "shelf_data.db"
 
 # ==================== 數據庫輔助函數 ====================
@@ -299,6 +300,9 @@ def add_product():
                         updated_at = CURRENT_TIMESTAMP
                     WHERE shelf_id = ?
                 ''', (product_id, product_name, product_length, stock_quantity, shelf_id))
+                flash(f'✓ 商品「{product_name}」已成功新增並綁定到貨架 {shelf_id}', 'success')
+            else:
+                flash(f'✓ 商品「{product_name}」已成功新增（未綁定貨架，可稍後在「貨架管理」中配置）', 'info')
             
             conn.commit()
             conn.close()
@@ -747,7 +751,8 @@ def delete_sensor_data():
         elif delete_type == 'time':
             days = data.get('days')
             hours = data.get('hours')
-            result = delete_sensor_data_by_time(days=days, hours=hours)
+            minutes = data.get('minutes')
+            result = delete_sensor_data_by_time(days=days, hours=hours, minutes=minutes)
         elif delete_type == 'device':
             device_id = data.get('device_id')
             result = delete_sensor_data_by_device(device_id)

@@ -488,13 +488,14 @@ def batch_save_sensor_data(data_list: list) -> bool:
         print(f"{Colors.FAIL}[錯誤]{Colors.ENDC} 批次數據庫儲存失敗: {e}")
         return False
 
-def delete_sensor_data_by_time(days: int = None, hours: int = None, all_data: bool = False) -> dict:
+def delete_sensor_data_by_time(days: int = None, hours: int = None, minutes: int = None, all_data: bool = False) -> dict:
     """
     刪除感測器歷史數據（不影響貨架配置和商品資訊）
     
     參數:
         days: 刪除 N 天前的數據
         hours: 刪除 N 小時前的數據
+        minutes: 刪除 N 分鐘前的數據
         all_data: 刪除所有歷史數據
     
     返回:
@@ -536,6 +537,17 @@ def delete_sensor_data_by_time(days: int = None, hours: int = None, all_data: bo
             
             deleted_count = count_before
             message = f"已刪除 {hours} 小時前的數據"
+            
+        elif minutes:
+            # 刪除 N 分鐘前的數據
+            cursor.execute('SELECT COUNT(*) FROM sensor_data WHERE timestamp < datetime("now", ?)', (f'-{minutes} minutes',))
+            count_before = cursor.fetchone()[0]
+            
+            cursor.execute('DELETE FROM sensor_data WHERE timestamp < datetime("now", ?)', (f'-{minutes} minutes',))
+            conn.commit()
+            
+            deleted_count = count_before
+            message = f"已刪除 {minutes} 分鐘前的數據"
         else:
             conn.close()
             return {'success': False, 'deleted_count': 0, 'message': '未指定刪除條件'}

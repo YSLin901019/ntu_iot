@@ -8,11 +8,14 @@
 <div style="background: #f1f5f9; padding: 20px; border-left: 4px solid #475569; border-radius: 5px; margin: 20px 0;">
     <h4 style="color: #1e293b; margin-bottom: 10px;">💡 新增流程</h4>
     <ol style="color: #495057; line-height: 1.8;">
-        <li>填寫商品基本資訊（ID、名稱、長度）</li>
-        <li>選擇商品要放置的區域</li>
-        <li>從該區域的可用貨架中選擇一個</li>
-        <li>設定初始庫存數量</li>
+        <li>填寫商品基本資訊（ID、名稱、長度）- <strong>必填</strong></li>
+        <li>選擇商品要放置的區域 - <strong style="color: #0891b2;">選填，可稍後綁定</strong></li>
+        <li>從該區域的可用貨架中選擇一個 - <strong style="color: #0891b2;">選填</strong></li>
+        <li>設定初始庫存數量（若不綁定貨架則預設為 0）</li>
     </ol>
+    <p style="color: #64748b; margin-top: 10px; font-size: 0.95em;">
+        💡 <strong>提示：</strong>您可以先建立商品資料，稍後再到「貨架管理」頁面進行綁定。
+    </p>
 </div>
 
 <form method="POST" style="max-width: 700px; margin-top: 30px;">
@@ -48,23 +51,23 @@
     
     <!-- 位置配置 -->
     <div style="background: #f8f9fa; padding: 20px; border-radius: 10px; margin-bottom: 20px;">
-        <h3 style="margin-bottom: 15px; color: #495057;">📍 位置配置</h3>
+        <h3 style="margin-bottom: 15px; color: #495057;">📍 位置配置 <span style="font-size: 0.8em; color: #0891b2; font-weight: normal;">（選填）</span></h3>
         
         {% if locations %}
         <div class="form-group">
-            <label for="location">選擇區域 *</label>
-            <select id="location" name="location" required onchange="loadShelves(this.value)">
-                <option value="">-- 請選擇區域 --</option>
+            <label for="location">選擇區域</label>
+            <select id="location" name="location" onchange="loadShelves(this.value)">
+                <option value="">-- 暫不綁定區域 --</option>
                 {% for location in locations %}
                 <option value="{{ location }}">{{ location }}</option>
                 {% endfor %}
             </select>
-            <small style="color: #6c757d;">選擇商品要放置的倉庫區域</small>
+            <small style="color: #6c757d;">若暫不綁定，可稍後在「貨架管理」中配置</small>
         </div>
         
         <div class="form-group">
-            <label for="shelf_id">選擇貨架 *</label>
-            <select id="shelf_id" name="shelf_id" required disabled>
+            <label for="shelf_id">選擇貨架</label>
+            <select id="shelf_id" name="shelf_id" disabled>
                 <option value="">-- 請先選擇區域 --</option>
             </select>
             <small style="color: #6c757d;">該區域中可用的貨架（未綁定商品）</small>
@@ -75,26 +78,25 @@
             <div id="shelf-details" style="margin-top: 10px;"></div>
         </div>
         {% else %}
-        <div style="background: #fff3cd; padding: 15px; border-radius: 5px;">
-            <strong style="color: #856404;">⚠️ 尚未配置任何區域</strong>
-            <p style="color: #856404; margin: 5px 0;">請先在「設備管理」中為 ESP32S3 設備指定負責區域。</p>
-            <a href="{{ url_for('devices') }}" class="btn btn-primary" style="margin-top: 10px;">前往設備管理</a>
+        <div style="background: #e0f2fe; padding: 15px; border-radius: 5px; border-left: 3px solid #0891b2;">
+            <strong style="color: #0e7490;">ℹ️ 尚未配置任何區域</strong>
+            <p style="color: #0e7490; margin: 5px 0;">您仍可以先建立商品資料，稍後再進行綁定。</p>
+            <p style="color: #64748b; margin: 5px 0; font-size: 0.9em;">若要立即綁定，請先在「設備管理」中為 ESP32S3 設備指定負責區域。</p>
+            <a href="{{ url_for('devices') }}" class="btn btn-info" style="margin-top: 10px;">前往設備管理</a>
         </div>
         {% endif %}
         
         <div class="form-group">
             <label for="stock_quantity">初始庫存數量</label>
             <input type="number" id="stock_quantity" name="stock_quantity" value="0" min="0">
-            <small style="color: #6c757d;">商品的初始庫存數量</small>
+            <small style="color: #6c757d;">若不綁定貨架，此欄位將被忽略（預設為 0）</small>
         </div>
     </div>
     
-    {% if locations %}
     <div class="action-buttons">
-        <button type="submit" class="btn btn-primary">✓ 新增商品並綁定貨架</button>
+        <button type="submit" class="btn btn-primary" id="submit-btn">✓ 新增商品</button>
         <a href="{{ url_for('products') }}" class="btn" style="background: #6c757d; color: white;">取消</a>
     </div>
-    {% endif %}
 </form>
 {% endblock %}
 
@@ -102,14 +104,27 @@
 <script>
     let shelvesData = {};
     
+    // 更新提交按鈕文字
+    function updateSubmitButton() {
+        const shelfSelect = document.getElementById('shelf_id');
+        const submitBtn = document.getElementById('submit-btn');
+        
+        if (shelfSelect.value) {
+            submitBtn.textContent = '✓ 新增商品並綁定貨架';
+        } else {
+            submitBtn.textContent = '✓ 新增商品（暫不綁定）';
+        }
+    }
+    
     function loadShelves(location) {
         const shelfSelect = document.getElementById('shelf_id');
         const shelfInfo = document.getElementById('shelf-info');
         
         if (!location) {
-            shelfSelect.innerHTML = '<option value="">-- 請先選擇區域 --</option>';
+            shelfSelect.innerHTML = '<option value="">-- 暫不綁定貨架 --</option>';
             shelfSelect.disabled = true;
             shelfInfo.style.display = 'none';
+            updateSubmitButton();
             return;
         }
         
@@ -124,9 +139,9 @@
                 if (data.count === 0) {
                     shelfSelect.innerHTML = '<option value="">-- 該區域沒有可用貨架 --</option>';
                     shelfSelect.disabled = true;
-                    alert(`區域「${location}」中沒有可用的貨架。\n\n請先在「貨架管理」中新增貨架，或選擇其他區域。`);
+                    alert(`區域「${location}」中沒有可用的貨架。\n\n您仍可以先建立商品，稍後再綁定。`);
                 } else {
-                    shelfSelect.innerHTML = '<option value="">-- 請選擇貨架 --</option>';
+                    shelfSelect.innerHTML = '<option value="">-- 暫不綁定貨架 --</option>';
                     data.shelves.forEach(shelf => {
                         const option = document.createElement('option');
                         option.value = shelf.shelf_id;
@@ -138,6 +153,7 @@
                     });
                     shelfSelect.disabled = false;
                 }
+                updateSubmitButton();
             })
             .catch(error => {
                 console.error('Error:', error);
@@ -178,6 +194,7 @@
         } else {
             shelfInfo.style.display = 'none';
         }
+        updateSubmitButton();
     });
 </script>
 {% endblock %}

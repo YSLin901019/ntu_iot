@@ -501,6 +501,74 @@
             margin-bottom: 20px;
             opacity: 0.4;
         }
+        
+        /* Flash 訊息樣式 */
+        .flash-messages {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 9999;
+            max-width: 400px;
+        }
+        
+        .flash-message {
+            padding: 15px 20px;
+            margin-bottom: 10px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            animation: slideIn 0.3s ease-out;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-weight: 500;
+        }
+        
+        @keyframes slideIn {
+            from {
+                transform: translateX(400px);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+        
+        .flash-message.success {
+            background: linear-gradient(135deg, #0891b2 0%, #0e7490 100%);
+            color: white;
+        }
+        
+        .flash-message.info {
+            background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+            color: white;
+        }
+        
+        .flash-message.warning {
+            background: linear-gradient(135deg, #64748b 0%, #475569 100%);
+            color: white;
+        }
+        
+        .flash-message.error {
+            background: linear-gradient(135deg, #64748b 0%, #475569 100%);
+            color: white;
+        }
+        
+        .flash-message .close-btn {
+            margin-left: auto;
+            background: none;
+            border: none;
+            color: white;
+            font-size: 20px;
+            cursor: pointer;
+            padding: 0 5px;
+            opacity: 0.7;
+            transition: opacity 0.2s;
+        }
+        
+        .flash-message .close-btn:hover {
+            opacity: 1;
+        }
     </style>
     {% block extra_style %}{% endblock %}
 </head>
@@ -522,12 +590,39 @@
             </ul>
         </nav>
         
+        <!-- Flash 訊息顯示 -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <div class="flash-messages">
+                    {% for category, message in messages %}
+                        <div class="flash-message {{ category }}">
+                            <span>{{ message }}</span>
+                            <button class="close-btn" onclick="this.parentElement.remove()">×</button>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+        
         <div class="content">
             {% block content %}{% endblock %}
         </div>
     </div>
     
     <script>
+        // 自動關閉 flash 訊息
+        document.addEventListener('DOMContentLoaded', function() {
+            const flashMessages = document.querySelectorAll('.flash-message');
+            flashMessages.forEach(function(message) {
+                setTimeout(function() {
+                    message.style.animation = 'slideIn 0.3s ease-out reverse';
+                    setTimeout(function() {
+                        message.remove();
+                    }, 300);
+                }, 5000); // 5秒後自動消失
+            });
+        });
+        
         // 刪除確認
         function confirmDelete(type, id, url) {
             if (confirm(`確定要刪除此${type}嗎？`)) {

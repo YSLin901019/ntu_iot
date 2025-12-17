@@ -20,9 +20,9 @@
 </div>
 
 <!-- 刪除數據選項（隱藏的彈出框）-->
-<div id="delete-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
-    <div style="background: white; padding: 30px; border-radius: 10px; max-width: 500px; width: 90%; box-shadow: 0 8px 16px rgba(0,0,0,0.2);">
-        <h3 style="margin: 0 0 20px 0; color: #2d3748;">🗑️ 清理感測器歷史數據</h3>
+<div id="delete-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); z-index: 1000; align-items: center; justify-content: center; backdrop-filter: blur(4px);">
+    <div style="background: white; padding: 30px; border-radius: 15px; max-width: 500px; width: 90%; box-shadow: 0 10px 25px rgba(0,0,0,0.3); animation: modalFadeIn 0.3s ease-out;">
+        <h3 style="margin: 0 0 20px 0; color: #1e293b; font-size: 1.3em;">🗑️ 清理感測器歷史數據</h3>
         
         <div style="background: #e0f2fe; padding: 15px; border-radius: 5px; border-left: 4px solid #0891b2; margin-bottom: 20px;">
             <strong style="color: #0e7490;">⚠️ 注意</strong>
@@ -32,16 +32,19 @@
         </div>
         
         <div style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 25px;">
-            <button onclick="deleteData('time', 7)" class="btn" style="background: #17a2b8; color: white; padding: 12px; text-align: left;">
-                🗓️ 刪除 7 天前的數據
+            <button onclick="deleteData('time', {minutes: 10})" class="btn" style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); color: white; padding: 12px; text-align: left; transition: all 0.3s;">
+                ⏱️ 刪除 10 分鐘前的數據
             </button>
-            <button onclick="deleteData('time', 30)" class="btn" style="background: #17a2b8; color: white; padding: 12px; text-align: left;">
-                🗓️ 刪除 30 天前的數據
+            <button onclick="deleteData('time', {days: 1})" class="btn" style="background: linear-gradient(135deg, #0891b2 0%, #0e7490 100%); color: white; padding: 12px; text-align: left; transition: all 0.3s;">
+                📅 刪除 1 天前的數據
             </button>
-            <button onclick="deleteData('time', 90)" class="btn" style="background: #17a2b8; color: white; padding: 12px; text-align: left;">
-                🗓️ 刪除 90 天前的數據
+            <button onclick="deleteData('time', {days: 3})" class="btn" style="background: linear-gradient(135deg, #64748b 0%, #475569 100%); color: white; padding: 12px; text-align: left; transition: all 0.3s;">
+                📅 刪除 3 天前的數據
             </button>
-            <button onclick="deleteData('all')" class="btn btn-danger" style="padding: 12px; text-align: left;">
+            <button onclick="deleteData('time', {days: 7})" class="btn" style="background: linear-gradient(135deg, #475569 0%, #334155 100%); color: white; padding: 12px; text-align: left; transition: all 0.3s;">
+                🗓️ 刪除 1 周前的數據
+            </button>
+            <button onclick="deleteData('all')" class="btn" style="background: linear-gradient(135deg, #64748b 0%, #1e293b 100%); color: white; padding: 12px; text-align: left; font-weight: 600; transition: all 0.3s;">
                 ⚠️ 刪除所有歷史數據
             </button>
         </div>
@@ -147,6 +150,17 @@
         100% { transform: rotate(360deg); }
     }
     
+    @keyframes modalFadeIn {
+        from {
+            opacity: 0;
+            transform: scale(0.9) translateY(-20px);
+        }
+        to {
+            opacity: 1;
+            transform: scale(1) translateY(0);
+        }
+    }
+    
     .data-row {
         transition: background-color 0.3s;
     }
@@ -162,6 +176,12 @@
     @keyframes highlight {
         0% { background-color: #d4edda; }
         100% { background-color: transparent; }
+    }
+    
+    /* 刪除按鈕 hover 效果 */
+    #delete-modal button:not(:last-child):hover {
+        transform: translateX(5px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
     }
 </style>
 
@@ -428,13 +448,30 @@ function hideDeleteOptions() {
 }
 
 // 刪除數據
-async function deleteData(type, days = null) {
+async function deleteData(type, timeParams = null) {
     let confirmMsg = '';
+    let timeDesc = '';
     
     if (type === 'all') {
-        confirmMsg = '確定要刪除所有感測器歷史數據嗎？\n\n此操作無法復原！\n（不會影響設備配置和貨架設定）';
-    } else if (type === 'time') {
-        confirmMsg = `確定要刪除 ${days} 天前的數據嗎？\n\n此操作無法復原！`;
+        confirmMsg = '⚠️ 確定要刪除所有感測器歷史數據嗎？\n\n此操作無法復原！\n（不會影響設備配置和貨架設定）';
+        timeDesc = '所有';
+    } else if (type === 'time' && timeParams) {
+        if (timeParams.minutes) {
+            timeDesc = `${timeParams.minutes} 分鐘前`;
+            confirmMsg = `確定要刪除 ${timeDesc}的數據嗎？\n\n此操作無法復原！`;
+        } else if (timeParams.days) {
+            if (timeParams.days === 1) {
+                timeDesc = '1 天前';
+            } else if (timeParams.days === 7) {
+                timeDesc = '1 周前';
+            } else {
+                timeDesc = `${timeParams.days} 天前`;
+            }
+            confirmMsg = `確定要刪除 ${timeDesc}的數據嗎？\n\n此操作無法復原！`;
+        } else if (timeParams.hours) {
+            timeDesc = `${timeParams.hours} 小時前`;
+            confirmMsg = `確定要刪除 ${timeDesc}的數據嗎？\n\n此操作無法復原！`;
+        }
     }
     
     if (!confirm(confirmMsg)) {
@@ -443,8 +480,10 @@ async function deleteData(type, days = null) {
     
     try {
         const requestData = { type };
-        if (type === 'time') {
-            requestData.days = days;
+        if (type === 'time' && timeParams) {
+            if (timeParams.days) requestData.days = timeParams.days;
+            if (timeParams.hours) requestData.hours = timeParams.hours;
+            if (timeParams.minutes) requestData.minutes = timeParams.minutes;
         }
         
         const response = await fetch('/api/sensor_data/delete', {
