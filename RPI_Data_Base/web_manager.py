@@ -911,7 +911,7 @@ def api_shelves_by_location(location):
 
 @app.route('/api/devices/discover')
 def api_discover_devices():
-    """API - 探測可用的 ESP32S3 設備"""
+    """API - 探測可用的 ESP32S3 設備（自動過濾已註冊設備）"""
     if not DISCOVERY_ENABLED:
         return jsonify({
             'success': False,
@@ -920,12 +920,34 @@ def api_discover_devices():
     
     try:
         # 執行設備探測
-        devices = discover_available_devices(timeout=5)
+        all_devices = discover_available_devices(timeout=5)
+        
+        # ✅ 從數據庫獲取已註冊的設備 ID 列表
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute('SELECT device_id FROM devices')
+        registered_device_ids = {row['device_id'] for row in cursor.fetchall()}
+        conn.close()
+        
+        # ✅ 過濾掉已註冊的設備
+        new_devices = [
+            device for device in all_devices 
+            if device['device_id'] not in registered_device_ids
+        ]
+        
+        # 統計信息
+        total_found = len(all_devices)
+        already_registered = len(all_devices) - len(new_devices)
         
         return jsonify({
             'success': True,
-            'count': len(devices),
-            'devices': devices
+            'count': len(new_devices),
+            'devices': new_devices,
+            'stats': {
+                'total_found': total_found,
+                'already_registered': already_registered,
+                'new_devices': len(new_devices)
+            }
         })
     except Exception as e:
         return jsonify({

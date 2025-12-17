@@ -269,8 +269,10 @@ def handle_status_message(payload: str, timestamp: str):
         
         print(f"  貨架數量: {data.get('shelf_count', 'N/A')}")
         
-        # 註冊或更新設備（使用原始 device_id 作為設備名稱）
-        register_device(device_id, device_name=device_id)
+        # ✅ 只更新已存在設備的狀態，不自動註冊新設備
+        # 這樣可以避免在用戶手動添加設備前就自動註冊
+        from database import update_device_last_seen
+        update_device_last_seen(device_id)
         
     except json.JSONDecodeError:
         print(f"  訊息: {payload}")

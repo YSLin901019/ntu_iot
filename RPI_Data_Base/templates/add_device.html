@@ -300,11 +300,52 @@
             const response = await fetch('/api/devices/discover');
             const data = await response.json();
             
-            if (data.success && data.count > 0) {
-                discoveredDevices = data.devices;
-                displayDevices(data.devices);
-                discoveredDiv.style.display = 'block';
+            if (data.success) {
+                // ✅ 顯示統計信息
+                const stats = data.stats || {};
+                const totalFound = stats.total_found || 0;
+                const alreadyRegistered = stats.already_registered || 0;
+                const newDevices = stats.new_devices || 0;
+                
+                // 如果有找到已註冊的設備，顯示提示
+                if (alreadyRegistered > 0) {
+                    const filterInfo = document.createElement('div');
+                    filterInfo.style.cssText = 'background: linear-gradient(135deg, #fff3cd 0%, #ffe69c 100%); padding: 12px 16px; border-radius: 8px; border-left: 4px solid #ffc107; margin-bottom: 15px; font-size: 14px;';
+                    filterInfo.innerHTML = `
+                        <strong>📊 探測結果：</strong><br>
+                        發現 <strong>${totalFound}</strong> 個在線設備，
+                        其中 <strong>${alreadyRegistered}</strong> 個已在系統中（已自動過濾），
+                        <strong>${newDevices}</strong> 個新設備可添加。
+                    `;
+                    
+                    // 插入到發現的設備列表之前
+                    if (newDevices > 0) {
+                        discoveredDiv.insertBefore(filterInfo, discoveredDiv.firstChild);
+                    } else {
+                        noDevicesDiv.innerHTML = `
+                            <p style="font-size: 1.1em;">✅ 掃描完成</p>
+                            <p>發現 ${totalFound} 個在線設備，但都已在系統中。</p>
+                            <p style="color: #666; font-size: 0.9em; margin-top: 15px;">
+                                💡 如需重新添加設備，請先在設備管理頁面刪除舊設備。
+                            </p>
+                        `;
+                        noDevicesDiv.style.display = 'block';
+                        scanBtn.disabled = false;
+                        scanStatus.style.display = 'none';
+                        document.getElementById('scan-text').textContent = '🔄 重新掃描';
+                        return;
+                    }
+                }
+                
+                if (data.count > 0) {
+                    discoveredDevices = data.devices;
+                    displayDevices(data.devices);
+                    discoveredDiv.style.display = 'block';
+                } else {
+                    noDevicesDiv.style.display = 'block';
+                }
             } else {
+                alert('❌ 設備探測失敗：' + (data.error || '未知錯誤'));
                 noDevicesDiv.style.display = 'block';
             }
         } catch (error) {
