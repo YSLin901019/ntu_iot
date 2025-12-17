@@ -48,8 +48,8 @@
 
     {% if not shelf.enabled %}
     <!-- 未啟用警告 -->
-    <div style="background: #fff3cd; padding: 20px; border-radius: 10px; border-left: 4px solid #ffc107; margin-bottom: 20px;">
-        <h4 style="color: #856404; margin: 0 0 10px 0;">⚠️ 貨架未啟用</h4>
+    <div style="background: #e0f2fe; padding: 20px; border-radius: 10px; border-left: 4px solid #0891b2; margin-bottom: 20px;">
+        <h4 style="color: #0e7490; margin: 0 0 10px 0;">⚠️ 貨架未啟用</h4>
         <p style="color: #856404; margin: 0;">此貨架尚未啟用，無法配置商品。請先在貨架管理頁面啟用此貨架。</p>
         <a href="{{ url_for('shelves') }}" class="btn btn-warning" style="margin-top: 15px;">返回啟用貨架</a>
     </div>

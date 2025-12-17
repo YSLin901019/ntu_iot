@@ -5,7 +5,7 @@
 {% block content %}
 <style>
     .dashboard-header {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        background: linear-gradient(135deg, #1a1f2e 0%, #2d3748 100%);
         padding: 40px;
         border-radius: 10px;
         color: white;
@@ -47,15 +47,15 @@
     }
     
     .stat-card:nth-child(1) {
-        border-left-color: #667eea;
+        border-left-color: #475569;
     }
     
     .stat-card:nth-child(2) {
-        border-left-color: #28a745;
+        border-left-color: #06b6d4;
     }
     
     .stat-card:nth-child(3) {
-        border-left-color: #ffc107;
+        border-left-color: #64748b;
     }
     
     .stat-card:nth-child(4) {
@@ -110,7 +110,7 @@
     .feature-btn {
         padding: 20px;
         text-align: center;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
         color: white;
         border-radius: 8px;
         text-decoration: none;
@@ -124,7 +124,7 @@
     
     .feature-btn:hover {
         transform: translateY(-4px);
-        box-shadow: 0 8px 16px rgba(102, 126, 234, 0.3);
+        box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
     }
     
     .feature-btn .icon {
@@ -132,14 +132,14 @@
     }
     
     .info-section {
-        background: linear-gradient(135deg, #e7f3ff 0%, #f0e7ff 100%);
+        background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%);
         padding: 30px;
         border-radius: 10px;
-        border-left: 4px solid #667eea;
+        border-left: 4px solid #475569;
     }
     
     .info-section h4 {
-        color: #667eea;
+        color: #1e293b;
         margin: 0 0 20px 0;
         font-size: 18px;
         font-weight: 600;
@@ -196,9 +196,9 @@
         <h3>📱 設備監控</h3>
         <div class="value">{{ stats.device_count }}</div>
         <div class="detail">
-            <span style="color: #28a745;">🟢 {{ stats.online_devices }}</span>
+            <span style="color: #0891b2;">🟢 {{ stats.online_devices }}</span>
             <span>|</span>
-            <span style="color: #dc3545;">🔴 {{ stats.device_count - stats.online_devices }}</span>
+            <span style="color: #64748b;">🔴 {{ stats.device_count - stats.online_devices }}</span>
         </div>
     </div>
     
@@ -206,7 +206,7 @@
         <h3>🗄️ 貨架管理</h3>
         <div class="value">{{ stats.shelf_count }}</div>
         <div class="detail">
-            <span style="color: #28a745;">🟢 {{ stats.active_shelves }} 活躍</span>
+            <span style="color: #0891b2;">🟢 {{ stats.active_shelves }} 活躍</span>
             <span>|</span>
             <span>✅ {{ stats.shelves_with_products }} 已配置</span>
         </div>

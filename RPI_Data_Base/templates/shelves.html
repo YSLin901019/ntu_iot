@@ -84,13 +84,13 @@
     }
     
     .shelf-card.enabled {
-        border-color: #28a745;
-        background: #d4edda;
+        border-color: #0891b2;
+        background: #cffafe;
     }
     
     .shelf-card.disabled {
-        border-color: #dc3545;
-        background: #f8d7da;
+        border-color: #64748b;
+        background: #e2e8f0;
     }
     
     .shelf-card:hover {
@@ -137,7 +137,7 @@ async function loadShelfConfig(deviceId) {
                     
                     // 貨架長度
                     const shelfLength = shelf.shelf_length > 0 ? `${shelf.shelf_length.toFixed(1)} cm` : '未校正';
-                    const lengthColor = shelf.shelf_length > 0 ? '#28a745' : '#ffc107';
+                    const lengthColor = shelf.shelf_length > 0 ? '#0891b2' : '#64748b';
                     
                     html += `
                         <div class="shelf-card ${enabledClass}" id="shelf-card-${fullShelfId}" data-full-shelf-id="${fullShelfId}" data-local-shelf-id="${localShelfId}" data-device-id="${deviceId}">
@@ -267,7 +267,7 @@ async function loadProductInfo(shelfId) {
         }
     } catch (error) {
         infoDiv.innerHTML = `
-            <div style="font-size: 0.85em; color: #dc3545;">
+            <div style="font-size: 0.85em; color: #64748b;">
                 ⚠️ 無法載入商品資訊
             </div>
         `;

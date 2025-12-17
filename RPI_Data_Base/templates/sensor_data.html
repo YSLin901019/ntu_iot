@@ -6,14 +6,14 @@
 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
     <h2>📈 感測器數據監控</h2>
     <div style="display: flex; gap: 10px; align-items: center;">
-        <span id="refresh-status" style="color: #28a745;">● 實時更新中</span>
+        <span id="refresh-status" style="color: #0891b2;">● 實時更新中</span>
         <button onclick="toggleAutoRefresh()" id="refresh-toggle" class="btn btn-success">
             ⏸️ 暫停更新
         </button>
         <button onclick="manualRefresh()" class="btn btn-primary">
             🔄 立即刷新
         </button>
-        <button onclick="showDeleteOptions()" class="btn btn-danger" style="background: #dc3545;">
+        <button onclick="showDeleteOptions()" class="btn btn-danger">
             🗑️ 清理數據
         </button>
     </div>
@@ -24,8 +24,8 @@
     <div style="background: white; padding: 30px; border-radius: 10px; max-width: 500px; width: 90%; box-shadow: 0 8px 16px rgba(0,0,0,0.2);">
         <h3 style="margin: 0 0 20px 0; color: #2d3748;">🗑️ 清理感測器歷史數據</h3>
         
-        <div style="background: #fff3cd; padding: 15px; border-radius: 5px; border-left: 4px solid #ffc107; margin-bottom: 20px;">
-            <strong style="color: #856404;">⚠️ 注意</strong>
+        <div style="background: #e0f2fe; padding: 15px; border-radius: 5px; border-left: 4px solid #0891b2; margin-bottom: 20px;">
+            <strong style="color: #0e7490;">⚠️ 注意</strong>
             <p style="color: #856404; margin: 5px 0 0 0; font-size: 14px;">
                 此操作只會刪除感測器的歷史數據記錄，<strong>不會影響</strong>設備配置、貨架設定、商品資訊等。
             </p>
@@ -56,17 +56,17 @@
 
 <!-- 統計卡片 -->
 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 20px;">
-    <div class="stat-card" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+    <div class="stat-card" style="background: linear-gradient(135deg, #1e293b 0%, #334155 100%); color: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
         <div style="font-size: 0.9em; opacity: 0.9;">總數據筆數</div>
         <div id="stat-total" style="font-size: 2em; font-weight: bold; margin-top: 5px;">-</div>
     </div>
     
-    <div class="stat-card" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); color: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+    <div class="stat-card" style="background: linear-gradient(135deg, #475569 0%, #64748b 100%); color: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
         <div style="font-size: 0.9em; opacity: 0.9;">在線設備</div>
         <div id="stat-devices" style="font-size: 2em; font-weight: bold; margin-top: 5px;">-</div>
     </div>
     
-    <div class="stat-card" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); color: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+    <div class="stat-card" style="background: linear-gradient(135deg, #64748b 0%, #94a3b8 100%); color: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
         <div style="font-size: 0.9em; opacity: 0.9;">活躍貨架</div>
         <div id="stat-shelves" style="font-size: 2em; font-weight: bold; margin-top: 5px;">-</div>
     </div>
@@ -273,10 +273,10 @@ function updateDataTable(data) {
         
         const fillPercent = item.fill_percent || 0;
         let fillColor;
-        if (fillPercent > 75) fillColor = '#28a745';
-        else if (fillPercent > 50) fillColor = '#ffc107';
-        else if (fillPercent > 25) fillColor = '#17a2b8';
-        else fillColor = '#dc3545';
+        if (fillPercent > 75) fillColor = '#0891b2';
+        else if (fillPercent > 50) fillColor = '#3b82f6';
+        else if (fillPercent > 25) fillColor = '#64748b';
+        else fillColor = '#475569';
         
         const productInfo = item.product_name || '<span style="color: #999;">未配置</span>';
         const locationInfo = item.device_location || '<span style="color: #999;">未分配</span>';
@@ -286,10 +286,10 @@ function updateDataTable(data) {
             <tr class="${rowClass}">
                 <td>${formatTime(item.timestamp)}</td>
                 <td><small>${item.device_id}</small></td>
-                <td><span style="color: #667eea; font-weight: bold;">${locationInfo}</span></td>
+                <td><span style="color: #334155; font-weight: bold;">${locationInfo}</span></td>
                 <td><strong>${item.shelf_id}</strong></td>
                 <td>${productInfo}</td>
-                <td style="text-align: center;"><strong style="color: #667eea;">${stockQuantity}</strong></td>
+                <td style="text-align: center;"><strong style="color: #334155;">${stockQuantity}</strong></td>
                 <td style="text-align: right;">${item.distance_cm.toFixed(1)}</td>
                 <td>${occupiedBadge}</td>
                 <td>
@@ -404,13 +404,13 @@ function toggleAutoRefresh() {
         toggleBtn.innerHTML = '⏸️ 暫停更新';
         toggleBtn.className = 'btn btn-success';
         status.innerHTML = '● 實時更新中';
-        status.style.color = '#28a745';
+        status.style.color = '#0891b2';
         startAutoRefresh();
     } else {
         toggleBtn.innerHTML = '▶️ 恢復更新';
         toggleBtn.className = 'btn btn-warning';
         status.innerHTML = '⏸️ 已暫停';
-        status.style.color = '#ffc107';
+        status.style.color = '#64748b';
         stopAutoRefresh();
     }
 }

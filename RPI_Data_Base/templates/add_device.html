@@ -10,7 +10,7 @@
     }
     
     .page-header {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        background: linear-gradient(135deg, #1a1f2e 0%, #2d3748 100%);
         padding: 30px;
         border-radius: 10px;
         color: white;
@@ -25,15 +25,15 @@
     }
     
     .info-box {
-        background: linear-gradient(135deg, #e7f3ff 0%, #f0e7ff 100%);
+        background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%);
         padding: 25px;
         border-radius: 10px;
-        border-left: 4px solid #667eea;
+        border-left: 4px solid #475569;
         margin-bottom: 30px;
     }
     
     .info-box h4 {
-        color: #667eea;
+        color: #1e293b;
         margin: 0 0 15px 0;
         font-size: 18px;
         font-weight: 600;
@@ -79,14 +79,14 @@
     }
     
     .device-card:hover {
-        border-color: #667eea;
-        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.2);
+        border-color: #475569;
+        box-shadow: 0 4px 12px rgba(71, 85, 105, 0.2);
         transform: translateY(-2px);
     }
     
     .device-card.selected {
-        border-color: #667eea;
-        background: linear-gradient(135deg, #f0f4ff 0%, #faf0ff 100%);
+        border-color: #475569;
+        background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%);
     }
     
     .device-info {
@@ -153,7 +153,7 @@
         background: linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%);
         padding: 20px;
         border-radius: 8px;
-        border-left: 4px solid #ffc107;
+        border-left: 4px solid #64748b;
     }
     
     .no-devices strong {
@@ -179,7 +179,7 @@
 </div>
 
 {% if error %}
-<div style="background: linear-gradient(135deg, #f8d7da 0%, #f5c2c7 100%); padding: 20px; border-radius: 8px; border-left: 4px solid #dc3545; margin-bottom: 20px;">
+<div style="background: linear-gradient(135deg, #e2e8f0 0%, #cbd5e1 100%); padding: 20px; border-radius: 8px; border-left: 4px solid #64748b; margin-bottom: 20px;">
     <div style="display: flex; align-items: center; gap: 10px;">
         <span style="font-size: 24px;">❌</span>
         <div>
@@ -213,7 +213,7 @@
     </div>
     
     <div id="scan-status" class="scan-status" style="display: none;">
-        <div class="spinner" style="width: 20px; height: 20px; border: 3px solid #f3f3f3; border-top: 3px solid #667eea; border-radius: 50%; animation: spin 1s linear infinite;"></div>
+        <div class="spinner" style="width: 20px; height: 20px; border: 3px solid #f3f3f3; border-top: 3px solid #475569; border-radius: 50%; animation: spin 1s linear infinite;"></div>
         <span id="scan-status-text" style="font-weight: 500;">正在掃描網路中的設備...</span>
     </div>
     
@@ -310,7 +310,7 @@
                 // 如果有找到已註冊的設備，顯示提示
                 if (alreadyRegistered > 0) {
                     const filterInfo = document.createElement('div');
-                    filterInfo.style.cssText = 'background: linear-gradient(135deg, #fff3cd 0%, #ffe69c 100%); padding: 12px 16px; border-radius: 8px; border-left: 4px solid #ffc107; margin-bottom: 15px; font-size: 14px;';
+                    filterInfo.style.cssText = 'background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%); padding: 12px 16px; border-radius: 8px; border-left: 4px solid #0891b2; margin-bottom: 15px; font-size: 14px;';
                     filterInfo.innerHTML = `
                         <strong>📊 探測結果：</strong><br>
                         發現 <strong>${totalFound}</strong> 個在線設備，
@@ -338,10 +338,10 @@
                 }
                 
                 if (data.count > 0) {
-                    discoveredDevices = data.devices;
-                    displayDevices(data.devices);
-                    discoveredDiv.style.display = 'block';
-                } else {
+                discoveredDevices = data.devices;
+                displayDevices(data.devices);
+                discoveredDiv.style.display = 'block';
+            } else {
                     noDevicesDiv.style.display = 'block';
                 }
             } else {
@@ -429,7 +429,7 @@
         
         const alert = document.createElement('div');
         alert.id = 'device-selected-alert';
-        alert.style.cssText = 'background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%); padding: 15px 20px; border-radius: 8px; border-left: 4px solid #28a745; margin-bottom: 20px; display: flex; align-items: center; gap: 12px;';
+        alert.style.cssText = 'background: linear-gradient(135deg, #cffafe 0%, #a5f3fc 100%); padding: 15px 20px; border-radius: 8px; border-left: 4px solid #0891b2; margin-bottom: 20px; display: flex; align-items: center; gap: 12px;';
         alert.innerHTML = `
             <span style="font-size: 24px;">✅</span>
             <div>
@@ -451,7 +451,7 @@
         }, 100);
         
         // 高亮表單
-        formSection.style.boxShadow = '0 0 0 4px rgba(40, 167, 69, 0.3)';
+        formSection.style.boxShadow = '0 0 0 4px rgba(8, 145, 178, 0.3)';
         setTimeout(() => {
             formSection.style.boxShadow = '0 2px 8px rgba(0,0,0,0.08)';
         }, 2000);
