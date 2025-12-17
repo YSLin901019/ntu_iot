@@ -149,6 +149,24 @@
             font-weight: 600;
         }
         
+        /* 補貨提醒特殊紅色樣式 */
+        nav a[href*="restock_alert"] {
+            color: #dc2626;
+            font-weight: 600;
+        }
+        
+        nav a[href*="restock_alert"]:hover {
+            color: #b91c1c;
+            background: rgba(220, 38, 38, 0.08);
+            border-bottom-color: #dc2626;
+        }
+        
+        nav a[href*="restock_alert"].active {
+            color: #991b1b;
+            border-bottom-color: #dc2626;
+            background: linear-gradient(180deg, rgba(220, 38, 38, 0.12) 0%, rgba(185, 28, 28, 0.08) 100%);
+        }
+        
         .content {
             padding: 30px 40px;
             background: 

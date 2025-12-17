@@ -28,9 +28,9 @@
 
 <!-- 統計卡片 -->
 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 20px;">
-    <div class="stat-card" style="border-left-color: #64748b;">
-        <h3>需補貨項目</h3>
-        <div class="value" id="stat-alerts" style="color: #475569;">-</div>
+    <div class="stat-card" style="border-left: 4px solid #dc2626; background: linear-gradient(135deg, rgba(220, 38, 38, 0.05) 0%, rgba(185, 28, 28, 0.03) 100%);">
+        <h3 style="color: #991b1b;">⚠️ 需補貨項目</h3>
+        <div class="value" id="stat-alerts" style="color: #dc2626; font-weight: 700;">-</div>
     </div>
 </div>
 
@@ -69,21 +69,22 @@
     }
     
     .alert-card {
-        background: white;
-        border-left: 4px solid #64748b;
+        background: linear-gradient(135deg, rgba(220, 38, 38, 0.08) 0%, rgba(185, 28, 28, 0.05) 100%);
+        border-left: 4px solid #dc2626;
         border-radius: 6px;
         padding: 15px;
         margin-bottom: 12px;
         transition: all 0.3s;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+        box-shadow: 0 1px 3px rgba(220, 38, 38, 0.15);
         display: flex;
         justify-content: space-between;
         align-items: center;
     }
     
     .alert-card:hover {
-        box-shadow: 0 3px 6px rgba(100, 116, 139, 0.15);
+        box-shadow: 0 3px 6px rgba(220, 38, 38, 0.25);
         transform: translateX(2px);
+        background: linear-gradient(135deg, rgba(220, 38, 38, 0.12) 0%, rgba(185, 28, 28, 0.08) 100%);
     }
     
     .alert-main {
@@ -96,7 +97,7 @@
     .alert-shelf-id {
         font-size: 1.1em;
         font-weight: 600;
-        color: #475569;
+        color: #991b1b;
         min-width: 70px;
     }
     
@@ -122,13 +123,14 @@
     }
     
     .alert-badge {
-        background: #64748b;
+        background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
         color: white;
         padding: 6px 14px;
         border-radius: 20px;
         font-size: 0.85em;
         font-weight: 600;
         white-space: nowrap;
+        box-shadow: 0 2px 4px rgba(220, 38, 38, 0.3);
     }
     
     .alert-list-container {
